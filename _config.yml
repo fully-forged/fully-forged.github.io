@@ -1,0 +1,12 @@
+# Site settings
+title: Fully Forged
+email: info@fullyforged.com
+description: > # this means to ignore newlines until "baseurl:"
+  Ruby, Elixir and Javascript development and consulting.
+baseurl: "" # the subpath of your site, e.g. /blog/
+url: "http://fullyforged.com.com" # the base hostname & protocol for your site
+twitter_username: fully_forged
+github_username:  fully-forged
+
+# Build settings
+markdown: kramdown
