@@ -1,0 +1,42 @@
+@import "bourbon/bourbon";
+@import "mixins";
+
+$phone-portrait: 320px;
+$phone-landscape: 640px;
+$laptop-small: 1440px;
+$tablet-landscape: 1024px;
+$tablet-portrait: 768px;
+
+$font-heavy: FuturaPT-Heavy, Helvetica, Arial, sans-serif;
+
+$dark-gray: #878787;
+
+a {
+  font-family: $font-heavy;
+  text-decoration: none;
+}
+
+.site-header {
+  @include display(flex);
+  @include flex-direction(column-reverse);
+  text-align: center;
+  margin: 2em 0;
+
+  nav {
+    @include display(flex);
+    @include justify-content(space-between);
+    margin: 0 auto;
+    width: 16em;
+  }
+
+  a {
+    color: $dark-gray;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  img {
+    margin: 1em auto;
+    width: 6em;
+  }
+}
