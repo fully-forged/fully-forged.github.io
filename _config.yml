@@ -10,3 +10,12 @@ github_username:  fully-forged
 
 # Build settings
 markdown: kramdown
+
+# Assets
+assets:
+  prefix: "/assets"
+  assets:
+    - "*.png"
+  digest: true
+  sources:
+    - "_images"
