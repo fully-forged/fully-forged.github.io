@@ -4,5 +4,16 @@
 @charset "utf-8";
 
 @import "normalize";
+@import "fonts";
 @import "header";
 @import "syntax-highlighting";
+
+body {
+  padding: 0 1em;
+  @include font-normal;
+  color: $black;
+}
+
+h1, h2, h3, h4 {
+  @include font-normal;
+}
