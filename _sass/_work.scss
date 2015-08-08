@@ -2,17 +2,31 @@
 @import "colors";
 
 .work {
-  margin-left: -1em;
-  margin-right: -1em;
-  background-color: rgba($yellow, 0.1);
-  text-align: center;
-  padding: 1.5em;
+  article {
+    margin-left: -1em;
+    margin-right: -1em;
+    text-align: center;
+    padding: 1.5em;
+    &.development {
+      background-color: rgba($yellow, 0.1);
+    }
+    &.training {
+      background-color: rgba($orange, 0.1);
+    }
+  }
 
   h1 {
     @include font-heavy;
-    color: $yellow;
     font-size: 1em;
     text-transform: uppercase;
+  }
+
+  .development h1 {
+    color: $yellow;
+  }
+
+  .training h1 {
+    color: $orange;
   }
 
   ul {
@@ -22,5 +36,15 @@
 
   li {
     list-style-type: none;
+  }
+
+  aside {
+    max-width: 10em;
+    margin: 0 auto;
+  }
+
+  p {
+    color: $dark-gray;
+    font-size: 0.9em;
   }
 }
