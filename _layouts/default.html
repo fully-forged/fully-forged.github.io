@@ -26,6 +26,10 @@
     </script>
     <script src="//use.typekit.net/lys8xqy.js"></script>
     <script>try{Typekit.load();}catch(e){}</script>
+
+    {% if jekyll.environment == "development" %}
+      <script src="http://10.0.1.13:35729/livereload.js"></script>
+    {% endif %}
   </body>
 
 </html>
