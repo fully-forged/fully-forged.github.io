@@ -1,6 +1,8 @@
 # Require jekyll to compile the site.
 require "jekyll"
 
+ENV["JEKYLL_ENV"] = 'production'
+
 # Github pages publishing.
 namespace :site do
   #
