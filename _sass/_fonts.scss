@@ -1,0 +1,11 @@
+$font-stack: "futura-pt", Helvetica, Arial;
+
+@mixin font-normal {
+  font-family: $font-stack;
+  font-weight: 400;
+}
+
+@mixin font-heavy {
+  font-family: $font-stack;
+  font-weight: 700;
+}
