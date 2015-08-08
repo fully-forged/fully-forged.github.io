@@ -2,7 +2,10 @@
 @import "breakpoints";
 
 .site-footer {
+  border-top: 1px solid rgba($ultra-light-gray, 0.1);
+  margin-top: 2em;
   margin-bottom: 2em;
+  padding-top: 2em;
 
   p {
     @include respond-max($phone-portrait) {
@@ -33,6 +36,7 @@
   }
 
   .contacts {
+    margin-top: 2em;
     @include respond-max($phone-portrait) {
       @include display(flex);
       @include justify-content(space-between);

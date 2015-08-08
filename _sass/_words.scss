@@ -1,0 +1,53 @@
+@import "fonts";
+@import "colors";
+@import "breakpoints";
+
+.words {
+  margin-top: 1em;
+
+  .posts {
+    @include respond-min($tablet-portrait) {
+      @include display(flex);
+    }
+  }
+
+  > h1 {
+    @include font-heavy;
+    font-size: 1em;
+    text-transform: uppercase;
+    color: $pink;
+    letter-spacing: 2px;
+  }
+
+  article {
+    @include respond-min($tablet-portrait) {
+      width: 44%;
+      margin-right: 6%;
+      &:last-child {
+        margin-right: 0;
+      }
+    }
+    h1 {
+      @include font-heavy;
+      font-size: 1em;
+      line-height: 1.2em;
+      letter-spacing: 1.75px;
+    }
+    h2 {
+      color: $pink;
+      font-size: 1em;
+      font-style: italic;
+    }
+    @include respond-max($phone-portrait) {
+      &:last-of-type {
+        display: none;
+      }
+    }
+
+    .more {
+      color: $pink;
+      text-transform: uppercase;
+      font-style: italic;
+    }
+  }
+}
