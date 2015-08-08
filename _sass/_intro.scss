@@ -1,7 +1,18 @@
 @import 'fonts';
 @import 'colors';
+@import 'breakpoints';
 
 .intro {
+  @include respond-min($tablet-portrait) {
+    width: 80%;
+    font-size: 1.6em;
+  }
+
+  @include respond-min($tablet-landscape) {
+    width: 70%;
+    font-size: 1.8em;
+  }
+
   h1 {
     text-transform: uppercase;
     font-size: 1.1em;
@@ -9,5 +20,11 @@
 
   p {
     display: none;
+
+    @include respond-min($tablet-portrait) {
+      display: block;
+      font-size: 0.8em;
+      color: $dark-gray;
+    }
   }
 }

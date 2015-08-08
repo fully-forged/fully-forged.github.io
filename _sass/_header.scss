@@ -1,4 +1,5 @@
 @import "bourbon/bourbon";
+@import "breakpoints";
 @import "mixins";
 @import "fonts";
 @import "colors";
@@ -14,16 +15,30 @@ a {
   text-align: center;
   margin: 2em 0 0;
 
+  @include respond-min($tablet-portrait) {
+    @include flex-direction(row);
+    @include justify-content(space-between);
+    margin-top: 0;
+  }
+
   nav {
     @include display(flex);
     @include justify-content(space-between);
-    margin: 0 auto;
-    width: 16em;
+    width: 14em;
+
+    @include respond-max($tablet-portrait) {
+      margin: 0 auto;
+    }
+
+    @include respond-min($tablet-portrait) {
+      @include align-items(center);
+    }
   }
 
   a {
     color: $dark-gray;
     letter-spacing: 0.1em;
+    font-size: 0.8em;
     text-transform: uppercase;
   }
 

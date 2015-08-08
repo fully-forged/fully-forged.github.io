@@ -13,6 +13,22 @@
     &.training {
       background-color: rgba($orange, 0.1);
     }
+
+    @include respond-min($tablet-portrait) {
+      $offset: -6em;
+      margin-left: $offset;
+      margin-right: $offset;
+      padding-left: 6em;
+      padding-right: 6em;
+      font-size: 1.5em;
+    }
+  }
+
+  section {
+    @include respond-min($tablet-portrait) {
+      @include display(flex);
+      @include justify-content(space-between);
+    }
   }
 
   h1 {
@@ -36,11 +52,18 @@
 
   li {
     list-style-type: none;
+
+    @include respond-min($tablet-portrait) {
+      text-align: left;
+    }
   }
 
   aside {
     max-width: 10em;
-    margin: 0 auto;
+
+    @include respond-max($tablet-portrait) {
+      margin: 0 auto;
+    }
   }
 
   p {

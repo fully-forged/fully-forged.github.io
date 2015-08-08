@@ -10,6 +10,10 @@ body {
   padding: 0 1em;
   @include font-normal;
   color: $black;
+
+  @include respond-min($tablet-portrait) {
+    padding: 0 6em;
+  }
 }
 
 h1, h2, h3, h4 {
