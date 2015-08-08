@@ -1,18 +1,10 @@
 @import "bourbon/bourbon";
 @import "mixins";
-
-$phone-portrait: 320px;
-$phone-landscape: 640px;
-$laptop-small: 1440px;
-$tablet-landscape: 1024px;
-$tablet-portrait: 768px;
-
-$font-heavy: FuturaPT-Heavy, Helvetica, Arial, sans-serif;
-
-$dark-gray: #878787;
+@import "fonts";
+@import "colors";
 
 a {
-  font-family: $font-heavy;
+  @include font-heavy;
   text-decoration: none;
 }
 
