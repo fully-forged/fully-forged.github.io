@@ -4,7 +4,7 @@ email: info@fullyforged.com
 description: > # this means to ignore newlines until "baseurl:"
   Ruby, Elixir and Javascript development and consulting.
 baseurl: "" # the subpath of your site, e.g. /blog/
-url: "http://fullyforged.com.com" # the base hostname & protocol for your site
+url: "http://fullyforged.com" # the base hostname & protocol for your site
 twitter_username: fully_forged
 github_username:  fully-forged
 
@@ -16,6 +16,9 @@ assets:
   prefix: "/assets"
   assets:
     - "*.png"
+    - "main.scss"
   digest: true
   sources:
     - "_images"
+    - "css"
+    - "_sass"
