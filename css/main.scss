@@ -17,6 +17,11 @@ body {
   }
 }
 
+#main {
+  max-width: em(1440px);
+  margin: 0 auto;
+}
+
 h1, h2, h3, h4 {
   @include font-normal;
 }
