@@ -1,0 +1,55 @@
+@import "colors";
+@import "breakpoints";
+
+.site-footer {
+  margin-bottom: 2em;
+
+  p {
+    @include respond-max($phone-portrait) {
+      text-align: center;
+    }
+  }
+
+  a.email {
+    color: $orange;
+  }
+
+  a.twitter {
+    color: $green;
+  }
+
+  a.github {
+    color: $blue;
+  }
+
+  .contacts, .vcard {
+    color: $light-gray;
+    margin-bottom: 1em;
+    text-align: center;
+
+    @include respond-min($tablet-portrait) {
+      display: inline;
+    }
+  }
+
+  .contacts {
+    @include respond-max($phone-portrait) {
+      @include display(flex);
+      @include justify-content(space-between);
+    }
+
+    @include respond-min($phone-portrait) {
+      .tel, .email {
+        margin-right: 0.5em;
+      }
+    }
+  }
+
+  .vcard {
+    @include respond-min($phone-portrait) {
+      div {
+        display: inline;
+      }
+    }
+  }
+}

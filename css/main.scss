@@ -3,6 +3,7 @@
 @import "header";
 @import "intro";
 @import "work";
+@import "footer";
 @import "buttons";
 @import "syntax-highlighting";
 
@@ -28,6 +29,6 @@ ul {
   -webkit-padding-start: 0;
 }
 
-.projects, .endorsement, .site-footer {
+.projects, .endorsement {
   display: none;
 }
