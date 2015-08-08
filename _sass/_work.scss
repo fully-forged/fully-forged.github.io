@@ -1,0 +1,26 @@
+@import "fonts";
+@import "colors";
+
+.work {
+  margin-left: -1em;
+  margin-right: -1em;
+  background-color: rgba($yellow, 0.1);
+  text-align: center;
+  padding: 1.5em;
+
+  h1 {
+    @include font-heavy;
+    color: $yellow;
+    font-size: 1em;
+    text-transform: uppercase;
+  }
+
+  ul {
+    margin-left: 0;
+    margin-bottom: 1.5em;
+  }
+
+  li {
+    list-style-type: none;
+  }
+}
