@@ -49,5 +49,13 @@
       text-transform: uppercase;
       font-style: italic;
     }
+
+    .credit {
+      font-size: 0.9em;
+
+      a {
+        color: $dark-gray;
+      }
+    }
   }
 }
