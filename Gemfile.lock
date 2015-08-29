@@ -80,6 +80,7 @@ GEM
     mercenary (0.3.5)
     method_source (0.8.2)
     mini_magick (4.2.10)
+    minitest (5.8.0)
     multi_json (1.11.2)
     nenv (0.2.0)
     notiffany (0.0.7)
@@ -130,4 +131,5 @@ DEPENDENCIES
   guard-livereload
   jekyll (~> 2.5.3)
   jekyll-assets (~> 1.0.0)
+  minitest (~> 5.8.0)
   rake (~> 10.4.2)

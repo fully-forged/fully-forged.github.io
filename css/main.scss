@@ -6,6 +6,7 @@
 @import "words";
 @import "footer";
 @import "buttons";
+@import "blog";
 
 body {
   padding: 0 1em;
@@ -18,7 +19,7 @@ body {
 }
 
 #main {
-  max-width: em(1440px);
+  max-width: em(1024px);
   margin: 0 auto;
 }
 

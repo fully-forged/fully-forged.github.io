@@ -25,6 +25,7 @@ a {
     @include display(flex);
     @include justify-content(space-between);
     width: 14em;
+    margin-right: 1em;
 
     @include respond-max($tablet-portrait) {
       margin: 0 auto;

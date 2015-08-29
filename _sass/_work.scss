@@ -16,11 +16,11 @@
 
     @include respond-min($tablet-portrait) {
       text-align: left;
-      $offset: -4em;
+      $offset: -7em;
       margin-left: $offset;
       margin-right: $offset;
-      padding-left: 4em;
-      padding-right: 4em;
+      padding-left: abs($offset);
+      padding-right: abs($offset);
       font-size: 1.5em;
     }
   }
