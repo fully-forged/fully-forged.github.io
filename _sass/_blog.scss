@@ -1,0 +1,22 @@
+@import "typography";
+@import "colors";
+
+#blog {
+  > h1 {
+    @include pink-title;
+    margin-bottom: 2em;
+  }
+
+  article {
+    margin-bottom: 3em;
+
+    h1 {
+      @include gray-title;
+      margin-bottom: 1em;
+    }
+
+    p {
+      color: darken($light-gray, 20%);
+    }
+  }
+}

@@ -1,6 +1,7 @@
 @import "fonts";
 @import "colors";
 @import "breakpoints";
+@import "typography";
 
 #words {
   margin-top: 1em;
@@ -12,11 +13,7 @@
   }
 
   > h1 {
-    @include font-heavy;
-    font-size: 1em;
-    text-transform: uppercase;
-    color: $pink;
-    letter-spacing: 2px;
+    @include pink-title;
   }
 
   article {
@@ -28,10 +25,7 @@
       }
     }
     h1 {
-      @include font-heavy;
-      font-size: 1em;
-      line-height: 1.2em;
-      letter-spacing: 1.75px;
+      @include gray-title;
     }
     h2 {
       color: $pink;
