@@ -50,3 +50,5 @@ namespace :site do
     # Done.
   end
 end
+
+task default: ["site:publish"]
