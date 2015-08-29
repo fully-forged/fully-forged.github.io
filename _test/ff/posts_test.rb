@@ -2,7 +2,13 @@ require 'minitest/autorun'
 require 'ostruct'
 require_relative '../../_plugins/ff/posts'
 
-class Post < OpenStruct; end
+class Post
+  attr_reader :data
+
+  def initialize(attrs)
+    @data = OpenStruct.new(attrs)
+  end
+end
 
 describe FF::Posts do
   include FF::Posts
