@@ -9,3 +9,7 @@ $font-stack: "futura-pt", Helvetica, Arial;
   font-family: $font-stack;
   font-weight: 700;
 }
+
+@mixin font-monospace {
+  font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+}

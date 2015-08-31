@@ -1,0 +1,77 @@
+@import "colors";
+@import "fonts";
+@import "typography";
+
+.post-title {
+  @include gray-title;
+}
+
+.post-meta {
+  @include pink-title;
+}
+
+.post-content {
+  h1 {
+    @include gray-title;
+    font-size: 0.8em;
+    text-transform: uppercase;
+    padding-bottom: 0.2em;
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+    border-bottom: 1px solid $light-gray;
+  }
+
+  p, li {
+    color: $dark-gray;
+    line-height: 1.5em;
+  }
+
+  p {
+    margin-bottom: 1.5em;
+  }
+
+  ul li {
+    margin-left: 1em;
+    padding-left: 0.5em;
+  }
+
+  ol li {
+    margin-left: 1.3em;
+    padding-left: 0.5em;
+  }
+
+  blockquote {
+    background-color: $ultra-light-gray;
+    padding: 1em 3em;
+    position: relative;
+
+    &::before, &::after {
+      font-family: Times, Georgia, serif;
+      font-size: 8.6em;
+      color: white;
+      position: absolute;
+      letter-spacing: -0.5em;
+    }
+
+    &::before {
+      top: -0.25em;
+      left: 0.1em;
+      content: "“";
+    }
+
+    &::after {
+      bottom: -0.71em;
+      right: 0.5em;
+      content: "”";
+    }
+
+    p:first-child {
+      text-indent: 2em;
+    }
+  }
+}
+
+.block-image {
+  margin: 0 auto;
+  display: block;
+}

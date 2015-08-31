@@ -1,5 +1,6 @@
 @import "normalize";
 @import "fonts";
+@import "colors";
 @import "header";
 @import "intro";
 @import "work";
@@ -7,6 +8,7 @@
 @import "footer";
 @import "buttons";
 @import "blog";
+@import "post";
 
 body {
   padding: 0 1em;
@@ -27,7 +29,16 @@ h1, h2, h3, h4 {
   @include font-normal;
 }
 
-ul {
+code {
+  $padding: 0.2em;
+  @include font-monospace;
+  font-size: 0.8em;
+  background-color: $ultra-light-gray;
+  padding-left: $padding;
+  padding-right: $padding;
+}
+
+ul, ol, blockquote {
   -webkit-margin-before: 0;
   -webkit-margin-after: 0;
   -webkit-margin-start: 0;
