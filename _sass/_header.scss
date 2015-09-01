@@ -18,6 +18,24 @@
 
   a {
     @include font-heavy;
+
+    &:nth-child(1):hover {
+      color: $teal;
+    }
+
+    &:nth-child(2):hover {
+      color: $pink;
+    }
+
+    &:nth-child(3):hover span{
+      &:nth-child(1) {
+        color: $yellow;
+      }
+
+      &:nth-child(2) {
+        color: $orange;
+      }
+    }
   }
 
   nav {
