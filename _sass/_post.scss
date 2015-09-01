@@ -1,6 +1,7 @@
 @import "colors";
 @import "fonts";
 @import "typography";
+@import "breakpoints";
 
 .post-title {
   @include gray-title;
@@ -51,6 +52,10 @@
       color: white;
       position: absolute;
       letter-spacing: -0.5em;
+
+      @include respond-max($phone-portrait) {
+        font-size: 6em;
+      }
     }
 
     &::before {
