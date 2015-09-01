@@ -4,11 +4,6 @@
 @import "fonts";
 @import "colors";
 
-a {
-  @include font-heavy;
-  text-decoration: none;
-}
-
 .site-header {
   @include display(flex);
   @include flex-direction(column-reverse);
@@ -19,6 +14,10 @@ a {
     @include flex-direction(row);
     @include justify-content(space-between);
     margin-top: 0;
+  }
+
+  a {
+    @include font-heavy;
   }
 
   nav {
