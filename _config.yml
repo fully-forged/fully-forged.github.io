@@ -9,8 +9,10 @@ twitter_username: fully_forged
 github_username:  fully-forged
 show_posts: true
 
+
 # Build settings
 markdown: kramdown
+permalink: /:year/:month/:day/:title.html
 
 # Assets
 assets:
