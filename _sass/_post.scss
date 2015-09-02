@@ -78,5 +78,10 @@
 
 .block-image {
   margin: 0 auto;
-  display: block;
+  max-width: 45em;
+
+  img {
+    display: block;
+    width: 100%;
+  }
 }

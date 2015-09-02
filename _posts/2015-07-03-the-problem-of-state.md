@@ -96,7 +96,9 @@ This model is extremely simple, as it removes a lot of complications:
 
 We can summarize all of this in this diagram:
 
-{% image posts/the-problem-of-state-01.jpg alt="State diagram" class="block-image" %}
+{% figure %}
+  {% image posts/the-problem-of-state-01.jpg alt="State diagram" %}
+{% endfigure %}
 
 # A minimal example
 
