@@ -10,4 +10,9 @@
   font-size: 0.8em;
   letter-spacing: 0.1em;
   display: inline-block;
+  @include transition(all 0.1s ease-in-out);
+  &:active {
+    padding: 0.7em 2.8em;
+    margin: 0.2em 0.4em;
+  }
 }
