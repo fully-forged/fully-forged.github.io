@@ -13,6 +13,7 @@
     margin-bottom: 3em;
 
     .post-link {
+      font-size: 1.4em;
       color: $black;
     }
 
@@ -22,6 +23,8 @@
     }
 
     p {
+      font-size: 1.2em;
+      line-height: 2em;
       color: darken($light-gray, 20%);
     }
   }
