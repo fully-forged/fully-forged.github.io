@@ -7,21 +7,15 @@ categories: javascript patterns
 
 _This post originally appeared on [New Bamboo's blog](https://www.new-bamboo.co.uk/blog/2015/07/23/the-problem-of-state/)._
 
-When we build client-side applications, most of the problems we face are
-related to state management: what elements on screen need to be in sync with
-each other, how do we track changes locally and from the server, how do we
-effectively handle computed properties (like a user’s complete address when
-it’s composed by separate pieces of data).
+When we build client-side applications, most of the problems we face are related to state management: what elements on screen need to be in sync with each other, how do we track changes locally and from the server, how do we effectively handle computed properties (like a user’s complete address when it’s composed by separate pieces of data).
 
-What can we do to tame this complexity? In this post we’ll explore some ideas
-and lay out the basis for a unified strategy.
+What can we do to tame this complexity? In this post we’ll explore some ideas and lay out the basis for a unified strategy.
 
 <!--more-->
 
 # Defining state
 
-It’s useful to remind ourselves what state is, as it goes way beyond the mere
-data that sits on our page.
+It’s useful to remind ourselves what state is, as it goes way beyond the mere data that sits on our page.
 
 Depending on the type of application we’re building, state can potentially be:
 
@@ -30,16 +24,13 @@ Depending on the type of application we’re building, state can potentially be:
 - Mouse position
 - Screen orientation
 
-Not many applications need this level of granularity, but it’s important to
-remember that it’s possible to treat all of these dimensions as a form of
-state.
+Not many applications need this level of granularity, but it’s important to remember that it’s possible to treat all of these dimensions as a form of state.
 
 # Identity and values
 
 How can we frame the notion of state as something that changes over time?
 
-We can get some help from the functional programming world, specifically from
-[Clojure and its creator, Rich Hickey](http://clojure.org/state):
+We can get some help from the functional programming world, specifically from [Clojure and its creator, Rich Hickey](http://clojure.org/state):
 
 > While some programs are merely large functions, e.g. compilers or theorem provers, many others are not - they are more like working models, and as such need to support what I’ll refer to in this discussion as **identity**. By identity I mean **a stable logical entity associated with a series of different values over time**. Models need identity for the same reasons humans need identity - to represent the world. How could it work if identities like ‘today’ or ‘America’ had to represent a single constant value for all time? Note that by identities I don’t mean names (I call my mother Mom, but you wouldn’t).
 >
