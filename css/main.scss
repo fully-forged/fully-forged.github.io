@@ -9,6 +9,7 @@
 @import "buttons";
 @import "blog";
 @import "post";
+@import "syntax-highlighting";
 
 body {
   padding: 0 1em;
@@ -35,12 +36,22 @@ h1, h2, h3, h4, a {
 }
 
 code {
-  $padding: 0.2em;
   @include font-monospace;
-  font-size: 0.8em;
+
+  &.highlighter-rouge {
+    $padding: 0.2em;
+    font-size: 0.8em;
+    padding-left: $padding;
+    padding-right: $padding;
+  }
+}
+
+.highlighter-rouge {
   background-color: $ultra-light-gray;
-  padding-left: $padding;
-  padding-right: $padding;
+
+  .highlight {
+    padding: 0.5em;
+  }
 }
 
 ul, ol, blockquote {

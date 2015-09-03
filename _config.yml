@@ -14,6 +14,10 @@ markdown: kramdown
 permalink: /:year/:month/:day/:title.html
 excerpt_separator: <!--more-->
 
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
 # Assets
 assets:
   prefix: "/assets"
