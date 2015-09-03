@@ -3,8 +3,13 @@
 @import "typography";
 @import "breakpoints";
 
+#post {
+  margin-top: 4em;
+}
+
 .post-title {
   @include gray-title;
+  font-size: 1.4em;
 }
 
 .post-meta {
