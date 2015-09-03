@@ -16,7 +16,7 @@ it’s composed by separate pieces of data).
 What can we do to tame this complexity? In this post we’ll explore some ideas
 and lay out the basis for a unified strategy.
 
-<!-- more -->
+<!--more-->
 
 # Defining state
 

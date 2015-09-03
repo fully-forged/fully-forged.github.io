@@ -7,12 +7,12 @@ layout: default
   {% for postgroup in grouped_posts %}
     <h1>{{ postgroup[0] }}</h1>
     {% for post in postgroup[1] %}
-    <a href={{ post.url }}>
       <article>
-        <h1>{{ post.title }}</h1>
+        <a href={{ post.url }} class="post-link">
+          <h1>{{ post.title }}</h1>
+        </a>
         <p>{{ post.excerpt }}</p>
       </article>
-    </a>
     {% endfor %}
   {% endfor %}
 </section>

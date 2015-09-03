@@ -2,6 +2,8 @@
 @import "colors";
 
 #blog {
+  margin-top: 4em;
+
   > h1 {
     @include pink-title;
     margin-bottom: 2em;
@@ -9,6 +11,10 @@
 
   article {
     margin-bottom: 3em;
+
+    .post-link {
+      color: $black;
+    }
 
     h1 {
       @include gray-title;
