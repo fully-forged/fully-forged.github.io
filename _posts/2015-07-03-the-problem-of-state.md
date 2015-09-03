@@ -104,7 +104,7 @@ We can summarize all of this in this diagram:
 
 In this example we’re creating a `PostsList` component, which takes some data and a DOM container and exposes a single `render` function. Every time the function is called, the component wipes out the contents of the container and renders a `ul` element with all titles.
 
-How do we use it? We set its .data property and call `render` every time we want to update it.
+How do we use it? We set its `.data` property and call `render` every time we want to update it.
 
 <iframe width="100%" height="300" src="//jsfiddle.net/cloud8421/e86g5n4m/4/embedded/js,html,result/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
 
