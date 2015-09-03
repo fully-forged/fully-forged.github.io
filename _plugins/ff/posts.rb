@@ -4,6 +4,10 @@ module FF
     LATEST_LABEL = "Latest articles"
     OLDER_LABEL  = "Older articles"
 
+    def latest(posts)
+      posts.take(LATEST_POSTS_COUNT)
+    end
+
     def group_by_date(posts)
       latest = posts.take(LATEST_POSTS_COUNT)
       older = posts.drop(LATEST_POSTS_COUNT)
