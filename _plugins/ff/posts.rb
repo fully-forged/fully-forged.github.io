@@ -1,3 +1,5 @@
+require 'date'
+
 module FF
   module Posts
     LATEST_POSTS_COUNT = 2
@@ -13,12 +15,12 @@ module FF
       older = posts.drop(LATEST_POSTS_COUNT)
 
       if (older.size > 0)
-        first_archive_post_date = older.first.data.date.to_date
+        first_archive_post_date = older.first.data["date"].to_date
         # we go back 15 days and then round to the beginning of the month
         threshold = find_threshold(first_archive_post_date, 15)
 
         older.reduce({LATEST_LABEL => latest}) do |memo, post|
-          month_key = month_key_for(post.data.date, threshold)
+          month_key = month_key_for(post.data["date"], threshold)
           memo[month_key] ||= []
           memo[month_key] << post
           memo
