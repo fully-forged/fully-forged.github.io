@@ -15,6 +15,7 @@ body {
   padding: 0 1em;
   @include font-normal;
   color: $black;
+  -webkit-font-smoothing: antialiased;
 
   @include respond-min($tablet-portrait) {
     padding: 0 6em;
