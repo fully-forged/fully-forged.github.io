@@ -4,10 +4,14 @@
 
 #work {
   article {
+    @include display(flex);
+    @include justify-content(space-between);
+    @include align-items(center);
     margin-left: -1em;
     margin-right: -1em;
     text-align: center;
-    padding: 1.5em;
+    padding: 1.5em 1.5em 0.5em;
+
     &.development {
       background-color: rgba($yellow, 0.1);
     }
@@ -17,19 +21,17 @@
 
     @include respond-min($tablet-portrait) {
       text-align: left;
-      $offset: -7em;
+      $offset: -13em;
       margin-left: $offset;
       margin-right: $offset;
       padding-left: abs($offset);
       padding-right: abs($offset);
       font-size: 1.5em;
+      overflow: hidden;
     }
-  }
 
-  section {
-    @include respond-min($tablet-portrait) {
-      @include display(flex);
-      @include justify-content(space-between);
+    @include respond-max($phone-landscape) {
+      @include flex-direction(column);
     }
   }
 
@@ -70,7 +72,8 @@
   }
 
   aside {
-    max-width: 10em;
+    max-width: 8em;
+    text-align: center;
 
     @include respond-max($tablet-portrait) {
       margin: 0 auto;
@@ -80,5 +83,6 @@
   p {
     color: $dark-gray;
     font-size: 0.5em;
+    margin: 1em 2em;
   }
 }
