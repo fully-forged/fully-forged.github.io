@@ -1,7 +1,9 @@
 # Require jekyll to compile the site.
 require "jekyll"
+require 'time'
 
 ENV["JEKYLL_ENV"] = 'production'
+
 
 # Github pages publishing.
 namespace :site do
@@ -48,6 +50,33 @@ namespace :site do
     end
 
     # Done.
+  end
+
+  desc 'create a new draft post'
+  task :post do
+    title = ENV['TITLE']
+    slug = "#{Date.today}-#{title.downcase.gsub(/[^\w]+/, '-')}"
+
+    file = File.join(
+        File.dirname(__FILE__),
+        '_posts',
+        slug + '.md'
+    )
+
+    File.open(file, "w") do |f|
+        f << <<-EOS.gsub(/^     /, '')
+        ---
+        layout: post
+        title: #{title}
+        date: #{Time.now.strftime('%Y-%m-%d %H:%M')}
+        published: false
+        categories:
+        ---
+
+        EOS
+    end
+
+    system ("#{ENV['EDITOR']} #{file}")
   end
 end
 
