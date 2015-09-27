@@ -1,5 +1,6 @@
-@import "fonts";
-@import "colors";
+@import 'fonts';
+@import 'typography';
+@import 'colors';
 
 #work {
   article {
@@ -34,7 +35,7 @@
 
   h1 {
     @include font-heavy;
-    font-size: 1em;
+    @include small-size;
     text-transform: uppercase;
   }
 
@@ -60,6 +61,7 @@
   }
 
   li {
+    @include base-size;
     list-style-type: none;
 
     @include respond-min($tablet-portrait) {
@@ -77,6 +79,6 @@
 
   p {
     color: $dark-gray;
-    font-size: 0.9em;
+    font-size: 0.5em;
   }
 }

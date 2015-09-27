@@ -1,5 +1,6 @@
 @import "normalize";
 @import "fonts";
+@import "typography";
 @import "colors";
 @import "header";
 @import "intro";
@@ -12,14 +13,10 @@
 @import "syntax-highlighting";
 
 body {
-  padding: 0 1em;
   @include font-normal;
+  @include base-size;
   color: $black;
   -webkit-font-smoothing: antialiased;
-
-  @include respond-min($tablet-portrait) {
-    padding: 0 6em;
-  }
 }
 
 #main {
@@ -33,7 +30,8 @@ a {
 }
 
 h1, h2, h3, h4, a {
-  @include font-normal;
+  @include base-size;
+  font-weight: normal;
 }
 
 code {

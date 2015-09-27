@@ -1,5 +1,6 @@
 @import "colors";
 @import "breakpoints";
+@import "typography";
 
 .site-footer {
   border-top: 1px solid $ultra-light-gray;
@@ -8,6 +9,8 @@
   padding-top: 2em;
 
   p {
+    @include base-size;
+
     @include respond-max($phone-portrait) {
       text-align: center;
     }
@@ -26,6 +29,7 @@
   }
 
   .contacts, .vcard {
+    @include small-size;
     color: $light-gray;
     margin-bottom: 1em;
     text-align: center;

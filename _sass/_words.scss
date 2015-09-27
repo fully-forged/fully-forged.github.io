@@ -14,6 +14,7 @@
 
   > h1 {
     @include pink-title;
+    @include small-size;
   }
 
   article {
@@ -26,10 +27,11 @@
     }
     h1 {
       @include gray-title;
+      @include base-size;
     }
     h2 {
+      @include base-size;
       color: $pink;
-      font-size: 1em;
       font-style: italic;
     }
     @include respond-max($phone-portrait) {
@@ -39,6 +41,7 @@
     }
 
     .more {
+      @include small-size;
       text-transform: uppercase;
       font-style: italic;
     }

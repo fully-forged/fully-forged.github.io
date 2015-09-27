@@ -1,9 +1,24 @@
 @import "fonts";
 @import "colors";
 
+$base-font-size: 16px;
+$small-font-size: 12px;
+$mega-font-size: 30px;
+
+@mixin base-size {
+  font-size: $base-font-size;
+}
+
+@mixin small-size {
+  font-size: rem($small-font-size);
+}
+
+@mixin mega-font-size {
+  font-size: rem($mega-font-size);
+}
+
 @mixin pink-title {
   @include font-heavy;
-  font-size: 1em;
   text-transform: uppercase;
   color: $pink;
   letter-spacing: 2px;
@@ -11,7 +26,6 @@
 
 @mixin gray-title {
   @include font-heavy;
-  font-size: 1em;
   line-height: 1.2em;
   letter-spacing: 1.75px;
 }
