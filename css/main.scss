@@ -1,5 +1,6 @@
 @import "normalize";
 @import "fonts";
+@import "typography";
 @import "colors";
 @import "header";
 @import "intro";
@@ -12,19 +13,23 @@
 @import "syntax-highlighting";
 
 body {
-  padding: 0 1em;
   @include font-normal;
+  @include base-size;
   color: $black;
   -webkit-font-smoothing: antialiased;
-
-  @include respond-min($tablet-portrait) {
-    padding: 0 6em;
-  }
 }
 
-#main {
-  max-width: em(1024px);
-  margin: 0 auto;
+.site-header, .intro, .projects,
+#work article,
+.endorsment, #words, .site-footer {
+  max-width: rem(720px);
+  margin-left: auto;
+  margin-right: auto;
+
+  @include respond-max($tablet-portrait) {
+    padding-left: rem(16px);
+    padding-right: rem(16px);
+  }
 }
 
 a {
@@ -33,7 +38,8 @@ a {
 }
 
 h1, h2, h3, h4, a {
-  @include font-normal;
+  @include base-size;
+  font-weight: normal;
 }
 
 code {

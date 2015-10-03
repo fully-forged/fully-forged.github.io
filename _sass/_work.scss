@@ -1,40 +1,37 @@
-@import "fonts";
-@import "colors";
+@import 'fonts';
+@import 'typography';
+@import 'colors';
 
 #work {
-  article {
-    margin-left: -1em;
-    margin-right: -1em;
-    text-align: center;
-    padding: 1.5em;
+  section {
     &.development {
       background-color: rgba($yellow, 0.1);
     }
     &.training {
       background-color: rgba($orange, 0.1);
     }
+  }
+  article {
+    @include display(flex);
+    @include justify-content(space-between);
+    @include align-items(center);
+    text-align: center;
+    padding: 1.5em 1.5em 0.5em;
 
     @include respond-min($tablet-portrait) {
       text-align: left;
-      $offset: -7em;
-      margin-left: $offset;
-      margin-right: $offset;
-      padding-left: abs($offset);
-      padding-right: abs($offset);
       font-size: 1.5em;
+      overflow: hidden;
     }
-  }
 
-  section {
-    @include respond-min($tablet-portrait) {
-      @include display(flex);
-      @include justify-content(space-between);
+    @include respond-max($phone-landscape) {
+      @include flex-direction(column);
     }
   }
 
   h1 {
     @include font-heavy;
-    font-size: 1em;
+    @include small-size;
     text-transform: uppercase;
   }
 
@@ -60,6 +57,7 @@
   }
 
   li {
+    @include base-size;
     list-style-type: none;
 
     @include respond-min($tablet-portrait) {
@@ -68,15 +66,21 @@
   }
 
   aside {
-    max-width: 10em;
+    max-width: 12em;
+    text-align: center;
 
-    @include respond-max($tablet-portrait) {
+    @include respond-max($phone-landscape) {
       margin: 0 auto;
     }
   }
 
   p {
     color: $dark-gray;
-    font-size: 0.9em;
+    font-size: 0.5em;
+    margin: 1em 2em;
+
+    @include respond-max($phone-landscape) {
+      font-size: 0.8em;
+    }
   }
 }
