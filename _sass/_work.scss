@@ -3,29 +3,23 @@
 @import 'colors';
 
 #work {
-  article {
-    @include display(flex);
-    @include justify-content(space-between);
-    @include align-items(center);
-    margin-left: -1em;
-    margin-right: -1em;
-    text-align: center;
-    padding: 1.5em 1.5em 0.5em;
-
+  section {
     &.development {
       background-color: rgba($yellow, 0.1);
     }
     &.training {
       background-color: rgba($orange, 0.1);
     }
+  }
+  article {
+    @include display(flex);
+    @include justify-content(space-between);
+    @include align-items(center);
+    text-align: center;
+    padding: 1.5em 1.5em 0.5em;
 
     @include respond-min($tablet-portrait) {
       text-align: left;
-      $offset: -13em;
-      margin-left: $offset;
-      margin-right: $offset;
-      padding-left: abs($offset);
-      padding-right: abs($offset);
       font-size: 1.5em;
       overflow: hidden;
     }
