@@ -4,6 +4,7 @@
 @import "fonts";
 
 .site-footer {
+  @extend .centered-column;
   border-top: 1px solid $ultra-light-gray;
   margin-top: 3em;
   margin-bottom: 2em;

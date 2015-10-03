@@ -4,6 +4,7 @@
 @import 'breakpoints';
 
 .intro {
+  @extend .centered-column;
   @include respond-min($tablet-portrait) {
     width: 80%;
   }

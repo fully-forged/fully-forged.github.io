@@ -12,6 +12,7 @@
     }
   }
   article {
+    @extend .centered-column;
     @include display(flex);
     @include justify-content(space-between);
     @include align-items(center);

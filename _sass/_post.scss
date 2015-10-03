@@ -4,6 +4,7 @@
 @import "breakpoints";
 
 #post {
+  @extend .centered-column;
   margin-top: 4em;
 }
 

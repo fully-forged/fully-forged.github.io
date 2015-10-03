@@ -6,10 +6,10 @@
 @import "typography";
 
 .site-header {
+  @extend .centered-column;
   @include display(flex);
   @include flex-direction(column-reverse);
   text-align: center;
-  margin: 2em 0 0;
 
   @include respond-min($tablet-portrait) {
     @include flex-direction(row);

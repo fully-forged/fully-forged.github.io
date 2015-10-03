@@ -4,6 +4,7 @@
 @import "typography";
 
 #words {
+  @extend .centered-column;
   margin-top: 3em;
 
   .posts {
