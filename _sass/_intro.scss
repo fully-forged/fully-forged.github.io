@@ -16,6 +16,10 @@
     text-transform: uppercase;
     @include mega-font-size;
     margin-bottom: 1.5em;
+
+    @include respond-max($phone-landscape) {
+      text-align: center;
+    }
   }
 
   p {

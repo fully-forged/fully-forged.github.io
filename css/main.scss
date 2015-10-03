@@ -23,7 +23,13 @@ body {
 #work article,
 .endorsment, #words, .site-footer {
   max-width: rem(720px);
-  margin: 0 auto;
+  margin-left: auto;
+  margin-right: auto;
+
+  @include respond-max($tablet-portrait) {
+    padding-left: rem(16px);
+    padding-right: rem(16px);
+  }
 }
 
 a {

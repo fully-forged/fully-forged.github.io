@@ -66,10 +66,10 @@
   }
 
   aside {
-    max-width: 8em;
+    max-width: 12em;
     text-align: center;
 
-    @include respond-max($tablet-portrait) {
+    @include respond-max($phone-landscape) {
       margin: 0 auto;
     }
   }
@@ -78,5 +78,9 @@
     color: $dark-gray;
     font-size: 0.5em;
     margin: 1em 2em;
+
+    @include respond-max($phone-landscape) {
+      font-size: 0.8em;
+    }
   }
 }

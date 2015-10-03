@@ -5,16 +5,32 @@ $base-font-size: 16px;
 $small-font-size: 12px;
 $mega-font-size: 30px;
 
+$base-font-size-mobile: 14px;
+$small-font-size-mobile: $small-font-size;
+$mega-font-size-mobile: 24px;
+
 @mixin base-size {
   font-size: $base-font-size;
+
+  @include respond-max($phone-landscape) {
+    font-size: $base-font-size-mobile;
+  }
 }
 
 @mixin small-size {
   font-size: rem($small-font-size);
+
+  @include respond-max($phone-landscape) {
+    font-size: rem($small-font-size-mobile);
+  }
 }
 
 @mixin mega-font-size {
   font-size: rem($mega-font-size);
+
+  @include respond-max($phone-landscape) {
+    font-size: rem($mega-font-size-mobile);
+  }
 }
 
 @mixin pink-title {
