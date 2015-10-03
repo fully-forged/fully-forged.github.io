@@ -10,27 +10,28 @@
 
 .post-title {
   @include gray-title;
-  font-size: 1.4em;
 }
 
 .post-meta {
   @include pink-title;
+  @include small-size;
+  margin-bottom: 2em;
 }
 
 .post-content {
   h1 {
     @include gray-title;
+    @include small-size;
     text-transform: uppercase;
     padding-bottom: 0.2em;
-    margin-top: 1.5em;
-    margin-bottom: 1.5em;
+    margin-top: 2.5em;
+    margin-bottom: 2em;
     border-bottom: 1px solid $light-gray;
   }
 
   p, li {
     color: $dark-gray;
-    line-height: 2em;
-    font-size: 1.2em;
+    line-height: 1.5em;
   }
 
   p {
