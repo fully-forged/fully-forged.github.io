@@ -1,0 +1,47 @@
+@import 'fonts';
+@import 'typography';
+@import 'colors';
+
+.endorsement {
+  background-color: rgba($green, 0.05);
+
+  > div {
+    @extend .centered-column;
+    padding-top: 3em;
+    padding-bottom: 3em;
+  }
+
+  h1 {
+    @include green-title;
+    @include small-size;
+  }
+
+  .quote {
+    border-left: 1px solid #d4d4d4;
+    padding-left: 2em;
+    margin-top: 1em;
+    padding-right: 2em;
+  }
+
+  blockquote {
+    margin-bottom: 0.2em;
+
+    @include respond-min($tablet-portrait) {
+      max-width: 65%;
+    }
+  }
+
+  cite {
+    @include small-size;
+    margin-top: 0.5em;
+    color: $green;
+    letter-spacing: 2px;
+    line-height: 24px;
+    text-transform: uppercase;
+
+    a {
+      @include small-size;
+      color: $green;
+    }
+  }
+}

@@ -45,3 +45,10 @@ $mega-font-size-mobile: 24px;
   line-height: 1.2em;
   letter-spacing: 1.75px;
 }
+
+@mixin green-title {
+  @include font-heavy;
+  text-transform: uppercase;
+  color: $green;
+  letter-spacing: 2px;
+}
