@@ -6,6 +6,7 @@
 @import "intro";
 @import "work";
 @import "endorsement";
+@import "projects";
 @import "words";
 @import "footer";
 @import "buttons";
@@ -55,8 +56,4 @@ ul, ol, blockquote {
   -webkit-margin-start: 0;
   -webkit-margin-end: 0;
   -webkit-padding-start: 0;
-}
-
-.projects {
-  display: none;
 }

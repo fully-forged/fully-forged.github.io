@@ -1,0 +1,53 @@
+@import 'fonts';
+@import 'typography';
+@import 'colors';
+
+.projects {
+  @extend .centered-column;
+  margin-top: 3em;
+  margin-bottom: 3em;
+
+  > h1 {
+    @include teal-title;
+    @include small-size;
+    text-align: center;
+    margin-bottom: 3em;
+  }
+
+  article {
+    position: relative;
+    border-left: 1px solid $teal;
+    margin-left: 50%;
+    padding-left: 2em;
+
+    h1 {
+      @include gray-title;
+      @include base-size;
+    }
+
+    h2 {
+      color: $teal;
+      font-style: italic;
+    }
+
+    .date {
+      @include small-size;
+      @include font-heavy;
+      color: $dark-gray;
+      float: left;
+      margin-left: -9.5em;
+      text-transform: uppercase;
+    }
+
+    &::before {
+      position: absolute;
+      top: -0.4em;
+      left: -0.36em;
+      font-size: 2em;
+      content: "\29BF";
+      color: $teal;
+      height: 0.95em;
+      background-color: white;
+    }
+  }
+}

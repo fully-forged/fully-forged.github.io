@@ -52,3 +52,10 @@ $mega-font-size-mobile: 24px;
   color: $green;
   letter-spacing: 2px;
 }
+
+@mixin teal-title {
+  @include font-heavy;
+  text-transform: uppercase;
+  color: $teal;
+  letter-spacing: 2px;
+}
