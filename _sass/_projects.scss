@@ -57,6 +57,12 @@
       color: $teal;
       height: 0.95em;
       background-color: white;
+
+      @include respond-max($phone-landscape) {
+        font-size: 1.5em;
+        top: -1.2em;
+        left: -0.5em;
+      }
     }
   }
 }
