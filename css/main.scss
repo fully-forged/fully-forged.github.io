@@ -34,6 +34,10 @@ h1, h2, h3, h4, a {
 code {
   @include font-monospace;
 
+  @include respond-max($phone-portrait) {
+    font-size: 0.7em;
+  }
+
   &.highlighter-rouge {
     $padding: 0.2em;
     font-size: 0.8em;
