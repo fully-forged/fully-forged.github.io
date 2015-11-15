@@ -17,6 +17,10 @@
     margin-top: 1em;
   }
 
+  @include respond-max($phone-landscape) {
+    margin-top: 3em;
+  }
+
   a {
     @include font-heavy;
     @include small-size;
