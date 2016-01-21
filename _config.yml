@@ -9,8 +9,8 @@ twitter_username: fully_forged
 github_username:  fully-forged
 show_posts: true
 availability:
-  build: February 2016
-  train: November 2015
+  build: June 2016
+  train: February 2016
 
 # Build settings
 markdown: kramdown
