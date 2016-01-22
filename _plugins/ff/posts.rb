@@ -15,7 +15,7 @@ module FF
       older = posts.drop(LATEST_POSTS_COUNT)
 
       if (older.size > 0)
-        first_archive_post_date = older.first.data["date"].to_date
+        first_archive_post_date = extract_date(older.first.data["date"])
         # we go back 15 days and then round to the beginning of the month
         threshold = find_threshold(first_archive_post_date, 15)
 
@@ -40,8 +40,16 @@ module FF
     end
 
     def month_key_for(post_time, threshold)
-      d = post_time.to_date
+      d = extract_date(post_time)
       d < threshold ? OLDER_LABEL : format_date_label(d)
+    end
+
+    def extract_date(time_or_string)
+      if time_or_string.respond_to?(:to_date)
+        time_or_string.to_date
+      else
+        Time.parse(time_or_string).to_date
+      end
     end
 
     def format_date_label(date)
