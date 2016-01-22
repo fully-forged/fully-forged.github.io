@@ -64,7 +64,7 @@ namespace :site do
     )
 
     File.open(file, "w") do |f|
-        f << <<-EOS.gsub(/^     /, '')
+        f << <<-EOS.gsub(/^       /, '')
         ---
         layout: post
         title: #{title}
