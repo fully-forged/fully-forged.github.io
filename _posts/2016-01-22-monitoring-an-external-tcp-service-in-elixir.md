@@ -127,7 +127,7 @@ We need to revise a few things:
 
 # Step 4: stop after 10 attempts
 
-Instead of retrying indefinitely, we want to stop after then attempts. This implies that we need to keep an attempt counter in the state. Before doing that, let's refactor and use a better data structure.
+Instead of retrying indefinitely, we want to stop after ten attempts. This implies that we need to keep an attempt counter in the state. Before doing that, let's refactor and use a better data structure.
 
 ```elixir
 defmodule HSC do
