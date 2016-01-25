@@ -252,9 +252,127 @@ end
 
 When the connection closes, we try to reconnect, once again setting the failure counts to the right values.
 
-# Missing stuff
+# Step 6 callbacks
 
-- callbacks
-- connection timeouts
-- staggering attempts
-- make retries/timeouts configurable
+We're now tracking the complete lifecycle of our tcp connection, so we can focus on exposing callbacks to act on disconnect/reconnect events. There are different strategies we can follow for this: one option is to initialized the `HSC` worker with the `pid` of another process that will receive messages for the aforementioned events, another is to simply pass the callback functions with the rest of the configuration. We'll stick with the latter for now, as the former requires a more extended process infrastructure.
+
+We can revise our application entry point as follows:
+
+```elixir
+  def start(_type, _args) do
+    import Supervisor.Spec, warn: false
+
+    children = [
+      # Define workers and child supervisors to be supervised
+      worker(HSC, [hsc_config]),
+    ]
+    ...
+  end
+  
+  defp hsc_config do
+    [host: "localhost",
+     port: 5432,
+     on_connect: fn(state) -> Logger.info "connected" end,
+     on_disconnect: fn(state) -> Logger.error "disconnected" end]
+  end
+```
+
+Our ideal api exposes two functions, `on_connect/1` and `on_disconnect/1`, that will receive the `HSC` worker state as an argument. This way we can use the state information to print a logline, etc. In the `on_connect/1` function we can do whatever's needed to restore the health of our application, for example calling `Applicaton.ensure_started/2` to restart (if needed) our external service dependant application. If we were monitoring a Postgresql server and using [Ecto](https://github.com/elixir-lang/ecto), we could call:
+
+```elixir
+Application.ensure_started(:poolboy)
+Application.ensure_started(:ecto)
+```
+
+As for the implementation of the two callbacks, we can revise the `HSC` module by extending its `State` struct definition and calling the relevant callbacks where needed:
+
+```elixir
+defmodule HSC do
+  use GenServer
+
+  @max_retries 10
+  @retry_interval 1000
+
+  defmodule DefaultCallbacks do
+    require Logger
+
+    def on_connect(state) do
+      Logger.info("tcp connect to #{state.host}:#{state.port}")
+    end
+
+    def on_disconnect(state) do
+      Logger.info("tcp disconnect from #{state.host}:#{state.port}")
+    end
+  end
+
+  defmodule State do
+    defstruct host: "localhost",
+              port: 1234,
+              failure_count: 0,
+              on_connect: &DefaultCallbacks.on_connect/1,
+              on_disconnect: &DefaultCallbacks.on_disconnect/1
+
+  end
+
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts)
+  end
+
+  def init(opts) do
+    state = opts_to_initial_state(opts)
+    case :gen_tcp.connect(state.host, state.port, []) do
+      {:ok, _socket} ->
+        state.on_connect.(state)
+        {:ok, state}
+      {:error, _reason} ->
+        new_state = %{state | failure_count: 1}
+        new_state.on_disconnect.(new_state)
+        {:ok, new_state, @retry_interval}
+    end
+  end
+
+  def handle_info(:timeout, state = %State{failure_count: failure_count}) do
+    if failure_count <= @max_retries do
+      case :gen_tcp.connect(state.host, state.port, []) do
+        {:ok, _socket} ->
+          new_state = %{state | failure_count: 0}
+          new_state.on_connect.(new_state)
+          {:noreply, new_state}
+        {:error, _reason} ->
+          new_state = %{state | failure_count: failure_count + 1}
+          new_state.on_disconnect.(new_state)
+          {:noreply, new_state, @retry_interval}
+      end
+    else
+      {:stop, :max_retry_exceeded, state}
+    end
+  end
+
+def handle_info({:tcp_closed, _socket}, state) do
+  case :gen_tcp.connect(state.host, state.port, []) do
+    {:ok, _socket} ->
+      new_state = %{state | failure_count: 0}
+      new_state.on_connect.(new_state)
+      {:noreply, new_state}
+    {:error, _reason} ->
+      new_state = %{state | failure_count: 1}
+      new_state.on_disconnect.(new_state)
+      {:noreply, new_state, @retry_interval}
+  end
+end
+
+  defp opts_to_initial_state(opts) do
+    host = Keyword.get(opts, :host, "localhost") |> String.to_char_list
+    port = Keyword.fetch!(opts, :port)
+    %State{host: host, port: port}
+  end
+end
+```
+
+Note that we define a `DefaultCallbacks` module that logs via `Logger` and then proceed to use the newly defined callbacks throughout the rest of the module, paying attention to modify the state **before** passing it to the functions (otherwise we would log incorrect failure counts).
+
+# Where do we go from here
+
+There's much more that we could build into this module: staggered retries, tcp connection timeout, extend configurability. All of these ideas can be built on top of the patterns we've seen, so they're left as an exercise for the reader.
+
+In this post we've seen how to use Elixir to increase the resiliency of our application when dependant on external services by building a simple healthcheck monitor. Please feel free to reach out with questions and/or suggestions on how to improve this!
