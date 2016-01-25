@@ -2,7 +2,7 @@
 layout: post
 title: Monitoring an external tcp service in Elixir
 date: 2016-01-29 09:17
-published: true
+published: false
 categories: elixir
 ---
 
