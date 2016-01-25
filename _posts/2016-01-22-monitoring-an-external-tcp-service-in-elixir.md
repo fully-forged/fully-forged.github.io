@@ -12,14 +12,14 @@ More often than not an application depends on external services, like databases 
 
 # What we're building
 
-Let's start from what we want to achieve and let's use, as an example, database availability. A deceptively simple requirement can be: **if the database goes down, I want my application to try and reconnect. After 10 unsuccesful attempts, it should give up and crash.**
+Let's start from what we want to achieve and let's use, as an example, database availability. A deceptively simple requirement can be: **if the database goes down, I want my application to try and reconnect. After 10 unsuccesful attempts, I want to switch to a replacement service.**
 
 This requirement means that our Health Status Checker (HSC) process needs to:
 
 - constantly monitor the database server by opening a tcp connection to it
 - if the connection drops, try to reconnect
 - if the reconnect is successful, restore the application to a stable state
-- if it fails 10 times in a row, crash and take down the node
+- if it fails 10 times in a row, switch to a replacement service
 
 # Step 1: creating the HSC worker
 
@@ -84,7 +84,7 @@ We can also see that `:gen_tcp.connect/3` requires us to cast the host to a char
 
 At this point, the `HSC` worker has very limited usefulness: we need to tackle the idea of retries. For starters, we'll focus on retrying the initial connection attempt.
 
-# Step 3: Retrying the initial connection attempt
+# Step 3: retrying the initial connection attempt
 
 As our external service can be unavailable at application boot time, we need to think about how to reconnect.
 
@@ -127,7 +127,7 @@ We need to revise a few things:
 
 # Step 4: stop after 10 attempts
 
-Instead of retrying indefinitely, we want to stop after then attempts. This implies that we need to keep an attempt counter in the state. Before doing that, let's refactor and use a better data structure.
+Instead of retrying indefinitely, we want to switch back to an in-memory service replacement after ten attempts. This implies that we need to keep an attempt counter in the state. Before doing that, let's refactor and use a better data structure.
 
 ```elixir
 defmodule HSC do
@@ -229,9 +229,9 @@ defmodule HSC do
 end
 ```
 
-We stop the worker by returning `{:stop, reason, state}` as we did in the beginning. At this point the worker will be restarted by the supervisor and will conform to its strategy. This means that we need to be careful with numbers.
+We stop the worker by returning `{:stop, reason, state}` as we did in the beginning. At this point the worker will be restarted by the supervisor and will conform to its strategy.
 
-By default the `Supervisor` will restart this worker a maximum of 3 times over 5 seconds (see [the documentation for `supervise/2`](http://elixir-lang.org/docs/stable/elixir/Supervisor.Spec.html#supervise/2) for more details on how to change that), while the worker's lifetime, in case of continuous failure, is at least 10 seconds (1 second interval, 10 retries). With this configuration, **it will never crash the top level supervisor**. To do that we would need to tweak intervals and retries to reach a good balance, especially if we consider how long it would take to restore/replace database connectivity (e.g. promoting another server or rerouting traffic).
+By default the `Supervisor` will restart this worker a maximum of 3 times over 5 seconds (see [the documentation for `supervise/2`](http://elixir-lang.org/docs/stable/elixir/Supervisor.Spec.html#supervise/2) for more details on how to change that), while the worker's lifetime, in case of continuous failure, is at least 10 seconds (1 second interval, 10 retries). With this configuration, **it will never crash the top level supervisor**.
 
 # Step 5: handling connection failures
 
@@ -252,9 +252,9 @@ end
 
 When the connection closes, we try to reconnect, once again setting the failure counts to the right values.
 
-# Step 6 callbacks
+# Step 6: callbacks
 
-We're now tracking the complete lifecycle of our tcp connection, so we can focus on exposing callbacks to act on disconnect/reconnect events. There are different strategies we can follow for this: one option is to initialized the `HSC` worker with the `pid` of another process that will receive messages for the aforementioned events, another is to simply pass the callback functions with the rest of the configuration. We'll stick with the latter for now, as the former requires a more extended process infrastructure.
+We're now tracking the complete lifecycle of our tcp connection, so we can focus on exposing callbacks to act on disconnect/reconnect/failure events. There are different strategies we can follow for this: one option is to initialized the `HSC` worker with the `pid` of another process that will receive messages for the aforementioned events, another is to simply pass the callback functions with the rest of the configuration. We'll stick with the latter for now, as the former requires a more extended process infrastructure.
 
 We can revise our application entry point as follows:
 
@@ -273,18 +273,22 @@ We can revise our application entry point as follows:
     [host: "localhost",
      port: 5432,
      on_connect: fn(state) -> Logger.info "connected" end,
-     on_disconnect: fn(state) -> Logger.error "disconnected" end]
+     on_disconnect: fn(state) -> Logger.error "disconnected" end,
+     on_failure: fn(state) -> MyApp.use_in_memory_store end]
   end
 ```
 
-Our ideal api exposes two functions, `on_connect/1` and `on_disconnect/1`, that will receive the `HSC` worker state as an argument. This way we can use the state information to print a logline, etc. In the `on_connect/1` function we can do whatever's needed to restore the health of our application, for example calling `Applicaton.ensure_started/2` to restart (if needed) our external service dependant application. If we were monitoring a Postgresql server and using [Ecto](https://github.com/elixir-lang/ecto), we could call:
+Our ideal api exposes 3 functions, `on_connect/1`, `on_disconnect/1` and `on_failure/1`, that will receive the `HSC` worker state as an argument. This way we can use the state information to print a logline, etc. In the `on_connect/1` function we can do whatever's needed to restore the health of our application, for example calling `Applicaton.ensure_started/2` to restart (if needed) our external service dependant application. If we were monitoring a Postgresql server and using [Ecto](https://github.com/elixir-lang/ecto), we could call:
 
 ```elixir
 Application.ensure_started(:poolboy)
 Application.ensure_started(:ecto)
+MyApp.use_external_store
 ```
 
-As for the implementation of the two callbacks, we can revise the `HSC` module by extending its `State` struct definition and calling the relevant callbacks where needed:
+These semantics may not be enough, depending on how complicated the use case is. If we switch to a in-memory alternative, for example, we may need to migrate that data to the external service when back up.
+
+As for the implementation of the three callbacks, we can revise the `HSC` module by extending its `State` struct definition and calling the relevant callbacks where needed:
 
 ```elixir
 defmodule HSC do
@@ -303,6 +307,10 @@ defmodule HSC do
     def on_disconnect(state) do
       Logger.info("tcp disconnect from #{state.host}:#{state.port}")
     end
+
+    def on_failure(state) do
+      Logger.info("tcp failure from #{state.host}:#{state.port}. Max retries exceeded.")
+    end
   end
 
   defmodule State do
@@ -310,7 +318,8 @@ defmodule HSC do
               port: 1234,
               failure_count: 0,
               on_connect: &DefaultCallbacks.on_connect/1,
-              on_disconnect: &DefaultCallbacks.on_disconnect/1
+              on_disconnect: &DefaultCallbacks.on_disconnect/1,
+              on_failure: &DefaultCallbacks.on_failure/1
 
   end
 
@@ -344,6 +353,7 @@ defmodule HSC do
           {:noreply, new_state, @retry_interval}
       end
     else
+      state.on_failure.(state)
       {:stop, :max_retry_exceeded, state}
     end
   end
@@ -373,6 +383,8 @@ Note that we define a `DefaultCallbacks` module that logs via `Logger` and then 
 
 # Where do we go from here
 
-There's much more that we could build into this module: staggered retries, tcp connection timeout, extend configurability. All of these ideas can be built on top of the patterns we've seen, so they're left as an exercise for the reader.
+There's much more that we could build into this module: staggered retries, tcp connection timeout, extend configurability. All of these ideas can be built on top of the patterns we've seen, so they're left as an exercise for the reader. In addition, in a production scenario we may need to use a more sophisticated approach to retries, maybe leveraging a library like [backoff](https://github.com/ferd/backoff).
 
 In this post we've seen how to use Elixir to increase the resiliency of our application when dependant on external services by building a simple healthcheck monitor. Please feel free to reach out with questions and/or suggestions on how to improve this!
+
+Thanks to [Saša Jurić](http://www.theerlangelist.com) and [Olly Legg](http://www.51degrees.net) for their feedback on the initial draft.
