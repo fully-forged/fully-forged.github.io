@@ -93,10 +93,18 @@ Finally, we need to hook into the Phoenix `socket` lifecycle to send its status 
   var socket = new Phoenix.Socket("/socket", {});
 
   socket.onOpen(function() {
+    // fires when connection is opened
     elmApp.ports.connectionStatusSignal.send(true);
   });
 
   socket.onClose(function() {
+    // fires when connection is explicitly closed by either
+    // the client or the channel
+    elmApp.ports.connectionStatusSignal.send(false);
+  });
+
+  socket.onError(function() {
+    // fires when an error causes the channel to crash
     elmApp.ports.connectionStatusSignal.send(false);
   });
 ```
