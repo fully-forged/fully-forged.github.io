@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Phoenix and Elm: tracking the connection status</title>
+  <meta name="description" content="When working with Phoenix channels and Elm it may be useful to keep track of the websockets connection status. In this blog post, we’ll see how this can be a...">
+  <meta property="og:description" content="When working with Phoenix channels and Elm it may be useful to keep track of the websockets connection status. In this blog post, we’ll see how this can be a...">
+  <meta property="og:site_name" content="Fully Forged">
+  <meta property="og:url" content="http://www.fullyforged.com/2016/01/21/phoenix-and-elm-tracking-the-connection-status.html">
+  <meta property="og:image" content="http://www.fullyforged.com/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png">
+
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="/assets/main-e64179a441158e60026a2fb2d9cb5f1d.css">
+  <link rel="canonical" href="http://www.fullyforged.com/2016/01/21/phoenix-and-elm-tracking-the-connection-status.html">
+  <link rel="alternate" type="application/rss+xml" title="Fully Forged" href="http://www.fullyforged.com/feed.xml" />
+  <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <script>window.html5 || document.write('<script src="js/vendor/html5shiv.js"><\/script>')</script>
+  <![endif]-->
+</head>
+
+
+  <body>
+
+    <div id="main">
+
+      <header class="site-header">
+  <a href="/">
+    <img src="/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png" alt="Logo">
+  </a>
+  <nav>
+    <a href="/#work">Work</a>
+    <a href="/blog.html">Words</a>
+    <a href="mailto:info@fullyforged.com?subject=Hello"><span>Hire</span> <span>us</span></a>
+  </nav>
+</header>
+
+
+      <div id="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Phoenix and Elm: tracking the connection status</h1>
+    <p class="post-meta">Thursday 21 January 2016</p>
+  </header>
+
+  <article class="post-content">
+    <p>When working with <a href="http://www.phoenixframework.org/docs/channels">Phoenix channels</a> and <a href="http://elm-lang.org">Elm</a> it may be useful to keep track of the websockets connection status. In this blog post, we’ll see how this can be accomplished by leveraging interoperability.</p>
+
+<!--more-->
+
+<p>This blog post won’t cover how to setup Phoenix and Elm together: if you’re interested into that and/or want a primer on how they can fit together, I heavily recommend <a href="http://www.cultivatehq.com/posts/phoenix-elm-1/">Alan Gardner’s series of tutorials on Cultivate’s blog</a>.</p>
+
+<p>Moreover, we assume the following versions:</p>
+
+<ul>
+  <li>Phoenix ~&gt; 1.0</li>
+  <li>Elm 0.16</li>
+</ul>
+
+<h1 id="step-1-add-the-needed-elements-to-the-elm-architecture">Step 1: add the needed elements to the Elm Architecture</h1>
+
+<p>Assuming our Elm application is built with the <a href="https://github.com/evancz/elm-architecture-tutorial">Elm Architecture</a>, we need to make a few changes:</p>
+
+<ul>
+  <li>Update the Model to hold a <code class="highlighter-rouge">connected</code> property</li>
+</ul>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">model</span> <span class="o">=</span>
+  <span class="p">{</span> <span class="n">connected</span> <span class="o">:</span> <span class="kt">False</span>
+  <span class="p">,</span> <span class="o">...</span>
+  <span class="p">}</span>
+</code></pre>
+</div>
+
+<ul>
+  <li>Add a new <code class="highlighter-rouge">Action</code> to express a connection change event</li>
+</ul>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="kr">type</span> <span class="kt">Action</span> <span class="o">=</span>
+  <span class="kt">NoOp</span>
+  <span class="o">|</span> <span class="kt">ConnectionChange</span> <span class="kt">Bool</span>
+  <span class="o">|</span> <span class="o">...</span>
+</code></pre>
+</div>
+
+<ul>
+  <li>Extend the main <code class="highlighter-rouge">update</code> function to handle the new <code class="highlighter-rouge">Action</code></li>
+</ul>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">update</span> <span class="o">:</span> <span class="kt">Action</span> <span class="o">-&gt;</span> <span class="kt">Model</span> <span class="o">-&gt;</span> <span class="p">(</span> <span class="kt">Model</span><span class="p">,</span> <span class="kt">Effects</span> <span class="kt">Action</span> <span class="p">)</span>
+<span class="n">update</span> <span class="n">action</span> <span class="n">model</span> <span class="o">=</span>
+  <span class="kr">case</span> <span class="n">action</span> <span class="kr">of</span>
+    <span class="o">...</span>
+    <span class="kt">ConnectionChange</span> <span class="n">connected</span> <span class="o">-&gt;</span>
+      <span class="p">({</span> <span class="n">model</span> <span class="o">|</span> <span class="n">connected</span> <span class="o">=</span> <span class="n">connected</span> <span class="p">},</span> <span class="kt">Effects</span><span class="o">.</span><span class="n">none</span><span class="p">)</span>
+</code></pre>
+</div>
+
+<h1 id="step-2-open-and-wire-a-port">Step 2: Open and wire a port</h1>
+
+<p>As we will receive the <code class="highlighter-rouge">connected</code> status value from the outside world, we need to open a port:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">port</span> <span class="n">connectionStatusSignal</span> <span class="o">:</span> <span class="kt">Signal</span> <span class="kt">Bool</span>
+</code></pre>
+</div>
+
+<p>Opening a port implies that now we have a new signal that we need to handle, so we need to extend the <code class="highlighter-rouge">StartApp</code> definition:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="kr">import</span> <span class="nn">Signal</span> <span class="n">exposing</span> <span class="p">(</span><span class="n">map</span><span class="p">)</span>
+
+<span class="n">app</span> <span class="o">:</span> <span class="kt">StartApp</span><span class="o">.</span><span class="kt">App</span> <span class="kt">Model</span>
+<span class="n">app</span> <span class="o">=</span>
+    <span class="kt">StartApp</span><span class="o">.</span><span class="n">start</span>
+        <span class="p">{</span> <span class="n">init</span> <span class="o">=</span> <span class="n">noFx</span> <span class="n">model</span>
+        <span class="p">,</span> <span class="n">view</span> <span class="o">=</span> <span class="n">view</span>
+        <span class="p">,</span> <span class="n">update</span> <span class="o">=</span> <span class="n">update</span>
+        <span class="p">,</span> <span class="n">inputs</span> <span class="o">=</span>
+            <span class="p">[</span> <span class="kt">ConnectionChange</span> <span class="p">`</span><span class="n">map</span><span class="p">`</span> <span class="n">connectionStatusSignal</span>
+            <span class="p">]</span>
+        <span class="p">}</span>
+</code></pre>
+</div>
+
+<p>In the code above, we add a new input by mapping the incoming values from our port to the <code class="highlighter-rouge">ConnectionChange</code> action defined before.</p>
+
+<h1 id="step-3-update-the-interop-layer">Step 3: Update the interop layer</h1>
+
+<p>As we added a new port, we need to update the JavaScript initialization step of our Elm application:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  <span class="kd">var</span> <span class="nx">elmApp</span> <span class="o">=</span> <span class="nx">Elm</span><span class="p">.</span><span class="nx">fullscreen</span><span class="p">(</span><span class="nx">Elm</span><span class="p">.</span><span class="nx">Main</span><span class="p">,</span> <span class="p">{</span>
+    <span class="na">connectionStatusSignal</span><span class="p">:</span> <span class="kc">false</span>
+  <span class="p">});</span>
+</code></pre>
+</div>
+
+<p>Finally, we need to hook into the Phoenix <code class="highlighter-rouge">socket</code> lifecycle to send its status back through the port:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  <span class="kd">var</span> <span class="nx">socket</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Phoenix</span><span class="p">.</span><span class="nx">Socket</span><span class="p">(</span><span class="s2">"/socket"</span><span class="p">,</span> <span class="p">{});</span>
+
+  <span class="nx">socket</span><span class="p">.</span><span class="nx">onOpen</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// fires when connection is opened</span>
+    <span class="nx">elmApp</span><span class="p">.</span><span class="nx">ports</span><span class="p">.</span><span class="nx">connectionStatusSignal</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+  <span class="p">});</span>
+
+  <span class="nx">socket</span><span class="p">.</span><span class="nx">onClose</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// fires when connection is explicitly closed by either</span>
+    <span class="c1">// the client or the channel</span>
+    <span class="nx">elmApp</span><span class="p">.</span><span class="nx">ports</span><span class="p">.</span><span class="nx">connectionStatusSignal</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">});</span>
+
+  <span class="nx">socket</span><span class="p">.</span><span class="nx">onError</span><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// fires when an error causes the channel to crash</span>
+    <span class="nx">elmApp</span><span class="p">.</span><span class="nx">ports</span><span class="p">.</span><span class="nx">connectionStatusSignal</span><span class="p">.</span><span class="nx">send</span><span class="p">(</span><span class="kc">false</span><span class="p">);</span>
+  <span class="p">});</span>
+</code></pre>
+</div>
+
+<p>This should be it! Feel free to ping <a href="https://twitter.com/fully_forged/">@fully_forged</a> on Twitter if you have any questions.</p>
+
+  </article>
+
+</div>
+
+
+      <footer class="site-footer">
+  <p>What are you waiting for? Send us an <a class="email" href="mailto:info@fullyforged.com?subject=Hello">email</a>.
+  Follow us on <a class="twitter" href="https://twitter.com/fully_forged">Twitter</a>. Or <a class="github" href="https://github.com/fully-forged">GitHub</a>.</p>
+  <div class="contacts">
+    <span class="tel">+447742143400</span>
+    <span class="email">info@fullyforged.com</span>
+  </div>
+  <div id="hcard-Claudio-Ortolina" class="vcard">
+    <span class="org">Fully Forged Ltd.</span>
+    <div class="adr">
+      <span class="street-address">44, North Point</span>
+      <span class="locality">London</span>
+      <span class="postal-code">N8 7HF</span>
+      <div class="country-name">United Kingdom</div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-66151638-1', 'auto');
+      ga('send', 'pageview');
+
+    </script>
+    <script src="//use.typekit.net/lys8xqy.js"></script>
+    <script>try{Typekit.load();}catch(e){}</script>
+
+    
+  </body>
+
+</html>

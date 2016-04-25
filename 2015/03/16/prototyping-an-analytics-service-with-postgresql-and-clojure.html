@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Prototyping an analytics service with PostgreSQL and Clojure</title>
+  <meta name="description" content="This post originally appeared on New Bamboo’s blog.During the last New Bamboo hack day I decided to work on a proof of concept for an analytics service, with...">
+  <meta property="og:description" content="This post originally appeared on New Bamboo’s blog.During the last New Bamboo hack day I decided to work on a proof of concept for an analytics service, with...">
+  <meta property="og:site_name" content="Fully Forged">
+  <meta property="og:url" content="http://www.fullyforged.com/2015/03/16/prototyping-an-analytics-service-with-postgresql-and-clojure.html">
+  <meta property="og:image" content="http://www.fullyforged.com/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png">
+
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="/assets/main-e64179a441158e60026a2fb2d9cb5f1d.css">
+  <link rel="canonical" href="http://www.fullyforged.com/2015/03/16/prototyping-an-analytics-service-with-postgresql-and-clojure.html">
+  <link rel="alternate" type="application/rss+xml" title="Fully Forged" href="http://www.fullyforged.com/feed.xml" />
+  <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <script>window.html5 || document.write('<script src="js/vendor/html5shiv.js"><\/script>')</script>
+  <![endif]-->
+</head>
+
+
+  <body>
+
+    <div id="main">
+
+      <header class="site-header">
+  <a href="/">
+    <img src="/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png" alt="Logo">
+  </a>
+  <nav>
+    <a href="/#work">Work</a>
+    <a href="/blog.html">Words</a>
+    <a href="mailto:info@fullyforged.com?subject=Hello"><span>Hire</span> <span>us</span></a>
+  </nav>
+</header>
+
+
+      <div id="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Prototyping an analytics service with PostgreSQL and Clojure</h1>
+    <p class="post-meta">Monday 16 March 2015</p>
+  </header>
+
+  <article class="post-content">
+    <p><em>This post originally appeared on <a href="https://www.new-bamboo.co.uk/blog/2015/03/16/prototyping-an-analytics-service-with-postgresql-and-clojure/">New Bamboo’s blog</a>.</em></p>
+
+<p>During the last New Bamboo hack day I decided to work on a proof of concept for an analytics service, with the goal of being able to instrument any of our running applications (both server side and client side) and expose the data with a restful api and a web sockets interface (for eventual dashboards, etc.).</p>
+
+<!--more-->
+
+<figure class="block-image">
+  <img src="/assets/posts/prototyping-an-analytics-service-with-postgresql-and-clojure-01-e9bfc7cdf62d6d51f396a9b79ca8f420.png" alt="Service structure" />
+</figure>
+
+<p>After a few days of initial research and preparation, I decided to focus on the storage and RESTful api. I had two questions guiding this prototype.</p>
+
+<ul>
+  <li>How can I store and query reasonably large volumes of data, partly structured and partly unstructured, with a focus on time?</li>
+  <li>How can I quickly build a performant RESTful api with minimal amount of code?</li>
+</ul>
+
+<h1 id="what-were-collecting">What we’re collecting</h1>
+
+<p>The sample data I’ve decided to use simulates client side analytics, i.e.  recording a page view in a browser.</p>
+
+<p>If we take a low-traffic website and assume 5 page views a minute (a very low estimate), we quickly get to high numbers, i.e. 648k page views in 3 months.<br />
+I’ve set this as a baseline data size to work with, in order to identify as early as I could any performance bottleneck that could arise with more significant data volumes.</p>
+
+<p>In terms of requirements, at any point in time the api needs to be able to:</p>
+
+<ul>
+  <li>Access a single page view in the course of the last month</li>
+  <li>Aggregate and count page views by day in the last month</li>
+  <li>Aggregate and count page views by week in the last 3 months</li>
+  <li>Aggregate and count page views by month in the last year</li>
+  <li>Slice these measures by a set of pre-made filters (e.g. browser or domain specific ones like an hypothetical <code class="highlighter-rouge">account</code>)</li>
+</ul>
+
+<p>A sample page view record can look like this:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">{</span><span class="w">
+    </span><span class="nt">"uuid"</span><span class="p">:</span><span class="w"> </span><span class="s2">"0cf61611-fe2e-4b75-a64d-d2b9e61b37ea"</span><span class="p">,</span><span class="w">
+    </span><span class="nt">"url"</span><span class="p">:</span><span class="w"> </span><span class="s2">"http: //www.claudio-ortolina.org"</span><span class="p">,</span><span class="w">
+    </span><span class="nt">"meta"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w">
+        </span><span class="nt">"browser"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chrome"</span><span class="p">,</span><span class="w">
+        </span><span class="nt">"account"</span><span class="p">:</span><span class="w"> </span><span class="s2">"new-bamboo"</span><span class="w">
+    </span><span class="p">},</span><span class="w">
+    </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2015-03-20T23:14:00Z"</span><span class="w">
+</span><span class="p">}</span><span class="w">
+</span></code></pre>
+</div>
+
+<p>Keys inside the <code class="highlighter-rouge">meta</code> attribute may or may not be present (this simulates the usage by different clients, platforms, etc.).</p>
+
+<h1 id="storage">Storage</h1>
+
+<p>When thinking about the data, we can summarise a few requirements about the storage:</p>
+
+<ul>
+  <li>Slice and group by period (day, week, month)</li>
+  <li>Query across optional dimensions (not all pages would have a browser)</li>
+  <li>Aggregation and window-based calculations</li>
+</ul>
+
+<p>The goal was to move as much as I could any data computation to the database, so that my api application layer could do the bare minimum to present the data.</p>
+
+<p>My initial hunch was that Postgresql would have been a great candidate, especially due to its recent support for JSON data formats, so I started with that.</p>
+
+<h1 id="db-schema">DB schema</h1>
+
+<p>We can model a page view as follows:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>┌────────────┬──────────────────────────┬───────────────┐
+│   Column   │           Type           │   Modifiers   │
+├────────────┼──────────────────────────┼───────────────┤
+│ uuid       │ uuid                     │ not null      │
+│ url        │ text                     │               │
+│ meta       │ jsonb                    │               │
+│ created_at │ timestamp with time zone │ default now() │
+└────────────┴──────────────────────────┴───────────────┘
+</code></pre>
+</div>
+
+<p>Starting with Postgres 9.4, we can use JSONB (where B stands for binary) to store json data. This allows use to use Generalized Inverted Indexes (GIN) to index keys in the JSON structure for a much faster lookup.</p>
+
+<p>If we wanted to index the <code class="highlighter-rouge">browser</code> attribute we could do:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">CREATE</span> <span class="k">index</span> <span class="n">idx_page_views_meta</span><span class="o">|</span><span class="n">_browser</span> <span class="k">on</span> <span class="n">page_views</span> <span class="k">USING</span> <span class="n">GIN</span><span class="p">((</span><span class="n">meta</span> <span class="o">-&gt;</span> <span class="s1">'browser'</span><span class="p">));</span>
+</code></pre>
+</div>
+
+<p>A subsequent query that uses that index can look like:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">SELECT</span> <span class="k">count</span><span class="p">(</span><span class="o">*</span><span class="p">)</span>
+<span class="k">FROM</span> <span class="n">page_views</span>
+<span class="k">WHERE</span> <span class="n">meta</span> <span class="o">-&gt;</span> <span class="s1">'browser'</span> <span class="o">?</span> <span class="s1">'firefox'</span><span class="p">;</span>
+</code></pre>
+</div>
+
+<p>The <code class="highlighter-rouge">-&gt;</code> operator searches for the <code class="highlighter-rouge">browser</code> key in the <code class="highlighter-rouge">meta</code> object, while the <code class="highlighter-rouge">?</code> operator tests that a document exists where the value is <code class="highlighter-rouge">firefox</code>.</p>
+
+<p>More information on JSONB and related operations are available <a href="https://wiki.postgresql.org/wiki/What%27s_new_in_PostgreSQL_9.4#JSONB_Binary_JSON_storage">in the changelog</a> and in <a href="http://rob.conery.io/2015/03/01/document-storage-gymnastics-in-postgres/">this blog post by Rob Conery</a>.</p>
+
+<p>Regarding grouping by a time range, we can extract the relevant part of the <code class="highlighter-rouge">created_at</code> timestamp and use it to group page views. For example, to group by week over the last month we can do:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">SELECT</span> <span class="k">extract</span><span class="p">(</span><span class="n">week</span> <span class="k">FROM</span> <span class="n">created_at</span><span class="p">)</span> <span class="k">AS</span> <span class="n">week</span><span class="p">,</span>
+       <span class="k">count</span><span class="p">(</span><span class="n">uuid</span><span class="p">)</span> <span class="k">as</span> <span class="n">page_views_count</span>
+<span class="k">FROM</span> <span class="n">page_views</span>
+<span class="k">WHERE</span> <span class="n">DATE</span><span class="p">(</span><span class="n">TIMEZONE</span><span class="p">(</span><span class="s1">'UTC'</span><span class="p">::</span><span class="n">text</span><span class="p">,</span> <span class="n">created_at</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">date_trunc</span><span class="p">(</span><span class="s1">'week'</span><span class="p">::</span><span class="n">text</span><span class="p">,</span> <span class="p">(</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="s1">'1 mon'</span><span class="p">::</span><span class="n">interval</span><span class="p">))</span>
+<span class="k">GROUP</span> <span class="k">BY</span> <span class="n">week</span>
+</code></pre>
+</div>
+
+<p>For a more efficient execution, we can add an index on <code class="highlighter-rouge">created_at</code>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">CREATE</span> <span class="k">INDEX</span> <span class="n">idx_page_views_created_at</span> <span class="k">ON</span> <span class="n">page_views</span><span class="p">(</span><span class="n">DATE</span><span class="p">(</span><span class="n">created_at</span> <span class="k">AT</span> <span class="n">TIME</span> <span class="k">ZONE</span> <span class="s1">'UTC'</span><span class="p">));</span>
+</code></pre>
+</div>
+
+<p>The only thing to keep in mind is that we explicitly set an index on the UTC representation of the datetime and cast it accordingly in the query.</p>
+
+<p>So how about performance?</p>
+
+<p>With the specified dataset size (the fake data I’ve created adds up to ~700k page views over the course of 3 months), grouping by day takes on my machine between 400ms and 600ms despite basic optimizations. There are different strategies to fix this, but I’ve opted for a very simple approach: <a href="http://www.postgresql.org/docs/9.3/static/rules-materializedviews.html">materialized views</a>.</p>
+
+<p>While a standard view is transient and computes its data from its source table(s), a materialized view data is independent from its source. Once created, its data is persisted. It can be refreshed any time.</p>
+
+<p>We can create a materialized view with the aggregation we used above and have a scheduled job that refreshes it every hour or so. This would guarantee a good balance between performance and freshness of the data.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">CREATE</span> <span class="n">MATERIALIZED</span> <span class="k">VIEW</span> <span class="n">weekly_page_views</span> <span class="k">AS</span>
+    <span class="k">SELECT</span> <span class="k">extract</span><span class="p">(</span><span class="n">week</span> <span class="k">FROM</span> <span class="n">created_at</span><span class="p">)</span> <span class="k">AS</span> <span class="n">week</span><span class="p">,</span>
+           <span class="k">count</span><span class="p">(</span><span class="n">uuid</span><span class="p">)</span> <span class="k">as</span> <span class="n">page_views_count</span>
+    <span class="k">FROM</span> <span class="n">page_views</span>
+    <span class="k">WHERE</span> <span class="n">DATE</span><span class="p">(</span><span class="n">TIMEZONE</span><span class="p">(</span><span class="s1">'UTC'</span><span class="p">::</span><span class="n">text</span><span class="p">,</span> <span class="n">created_at</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">date_trunc</span><span class="p">(</span><span class="s1">'week'</span><span class="p">::</span><span class="n">text</span><span class="p">,</span> <span class="p">(</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="s1">'1 mon'</span><span class="p">::</span><span class="n">interval</span><span class="p">))</span>
+    <span class="k">GROUP</span> <span class="k">BY</span> <span class="n">week</span>
+</code></pre>
+</div>
+
+<p>Refreshing is just a matter of:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">REFRESH</span> <span class="n">MATERIALIZED</span> <span class="k">VIEW</span> <span class="n">weekly_page_views</span><span class="p">;</span>
+</code></pre>
+</div>
+
+<p>We don’t need to as the table size is pretty small, but we could potentially add some indexes on this view as well.</p>
+
+<p>By using this technique, the sql execution time gets back in the order of a few milliseconds.</p>
+
+<h1 id="the-api-layer">The api layer</h1>
+
+<p>Once again, let’s think about requirements for the api stack:</p>
+
+<ul>
+  <li>efficient at crunching numbers</li>
+  <li>optimised to build an api</li>
+  <li>easy to integrate with custom sql</li>
+</ul>
+
+<p>This seems a good use case for <a href="https://clojure-liberator.github.io/">Liberator</a>, an api framework for <a href="http://clojure.org/">Clojure</a>, and <a href="https://github.com/krisajenkins/yesql">Yesql</a>, a library that generates Clojure functions from sql code.</p>
+
+<p>Liberator follows a conceptually simple approach: every api endpoint can be implemented by following the decision tree of the <a href="http://www.ietf.org/rfc/rfc2616.txt">HTTP specification (RFC-2616)</a>, as also <a href="https://clojure-liberator.github.io/liberator/assets/img/decision-graph.svg">visually outlined in the documentation</a>. This means that I can think of all my endpoints as state machines.</p>
+
+<p>As an example, let’s consider the api request for <code class="highlighter-rouge">POST /page_views</code>, used to create a new page view record.</p>
+
+<p>I can express this idea as a <strong>resource</strong> which can be mounted at a specific url.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">(</span><span class="nf">defresource</span><span class="w"> </span><span class="n">post-pages</span><span class="w"> </span><span class="p">[]</span><span class="w">
+  </span><span class="no">:available-media-types</span><span class="w"> </span><span class="p">[</span><span class="s">"application/json"</span><span class="p">]</span><span class="w">
+  </span><span class="no">:allowed-methods</span><span class="w"> </span><span class="p">[</span><span class="no">:post</span><span class="p">]</span><span class="w">
+  </span><span class="no">:malformed?</span><span class="w"> </span><span class="p">(</span><span class="k">fn</span><span class="w"> </span><span class="p">[</span><span class="n">ctx</span><span class="p">]</span><span class="w"> </span><span class="p">(</span><span class="nf">is-malformed-json</span><span class="w"> </span><span class="n">ctx</span><span class="p">))</span><span class="w">
+  </span><span class="no">:post!</span><span class="w"> </span><span class="p">(</span><span class="k">fn</span><span class="w"> </span><span class="p">[</span><span class="n">ctx</span><span class="p">]</span><span class="w">
+           </span><span class="p">(</span><span class="nf">create-page</span><span class="w"> </span><span class="p">(</span><span class="nf">extract-params-from</span><span class="w"> </span><span class="n">ctx</span><span class="p">))))</span><span class="w">
+</span></code></pre>
+</div>
+
+<p>This resource will only allow <code class="highlighter-rouge">POST</code> (responding with <code class="highlighter-rouge">501 (unknown method)</code> to any other method). If requested with invalid JSON, it will respond with <code class="highlighter-rouge">400 (malformed)</code>.<br />
+In case of a well formed request, it will proceed to <code class="highlighter-rouge">post!</code>, where we extract the page view parameters from the request body and create a page in the database.</p>
+
+<p>It’s a very elegant approach that combines clarity with simplicity as it stands on the structure provided by the HTTP spec. This way I don’t have to remember to check for malformed content, I can just simply implement the callback.</p>
+
+<p>As for Yesql, I can just write an <code class="highlighter-rouge">.sql</code> file with comments in a specific notation:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="c1">-- name: all-by-url
+-- Finds all page-views filtered by url
+</span><span class="k">SELECT</span> <span class="o">*</span>
+<span class="k">FROM</span> <span class="n">page_views</span>
+<span class="k">WHERE</span> <span class="p">(</span><span class="n">url</span> <span class="o">=</span> <span class="p">:</span><span class="n">url</span><span class="p">)</span>
+<span class="k">LIMIT</span> <span class="p">:</span><span class="k">limit</span><span class="p">;</span>
+</code></pre>
+</div>
+
+<p>The first comment line defines the function name, the second the help description. Placeholders like <code class="highlighter-rouge">:url</code> and <code class="highlighter-rouge">:limit</code> will define the arguments accepted by the function itself.</p>
+
+<p>I can have a very short Clojure namespace that imports this file and generate these functions through a macro:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">(</span><span class="nf">ns</span><span class="w"> </span><span class="n">mergen.page-view</span><span class="w">
+  </span><span class="p">(</span><span class="no">:require</span><span class="w"> </span><span class="p">[</span><span class="n">yesql.core</span><span class="w"> </span><span class="no">:refer</span><span class="w"> </span><span class="p">[</span><span class="n">defqueries</span><span class="p">]]</span><span class="w">
+            </span><span class="p">[</span><span class="n">mergen.db</span><span class="w"> </span><span class="no">:as</span><span class="w"> </span><span class="n">db</span><span class="p">]))</span><span class="w">
+
+</span><span class="p">(</span><span class="nf">defqueries</span><span class="w"> </span><span class="s">"mergen/queries/page-view.sql"</span><span class="w">
+  </span><span class="p">{</span><span class="no">:connection</span><span class="w"> </span><span class="n">db/db-spec</span><span class="p">})</span><span class="w">
+</span></code></pre>
+</div>
+
+<p>I can use them by calling:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">(</span><span class="nf">page-view/all-by-url</span><span class="w"> </span><span class="p">{</span><span class="no">:url</span><span class="w"> </span><span class="s">"http://google.com"</span><span class="w"> </span><span class="no">:limit</span><span class="w"> </span><span class="mi">100</span><span class="p">})</span><span class="w">
+</span></code></pre>
+</div>
+
+<p>This query will return a Clojure list with values casted to Clojure types by the underlying JDBC driver. It really just works.</p>
+
+<p>Being the data a data structure, it can be efficiently manipulated using Clojure’s rich standard library, so the result code is particularly succinct.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">(</span><span class="k">defn</span><span class="w"> </span><span class="n">all-pages-by-week</span><span class="w"> </span><span class="p">[]</span><span class="w">
+  </span><span class="p">(</span><span class="k">let</span><span class="w"> </span><span class="p">[</span><span class="n">raw-data</span><span class="w"> </span><span class="p">(</span><span class="nf">page-view/all-grouped-by-week</span><span class="p">)</span><span class="w">
+        </span><span class="n">page-views-data</span><span class="w"> </span><span class="p">(</span><span class="nb">map</span><span class="w"> </span><span class="n">serialize-week-count</span><span class="w"> </span><span class="n">raw-data</span><span class="p">)]</span><span class="w">
+    </span><span class="p">(</span><span class="nf">generate-string</span><span class="w"> </span><span class="p">{</span><span class="no">:page-views</span><span class="w"> </span><span class="n">page-views-data</span><span class="w">
+                      </span><span class="no">:meta</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="no">:count</span><span class="w"> </span><span class="p">(</span><span class="nb">count</span><span class="w"> </span><span class="n">raw-data</span><span class="p">)</span><span class="w">
+                              </span><span class="no">:total</span><span class="w"> </span><span class="p">(</span><span class="nb">reduce</span><span class="w"> </span><span class="nb">+</span><span class="w"> </span><span class="p">(</span><span class="nb">map</span><span class="w"> </span><span class="no">:page_views_count</span><span class="w"> </span><span class="n">raw-data</span><span class="p">))}})))</span><span class="w">
+</span></code></pre>
+</div>
+
+<p>This function gets all pages by week, serializes them one by one into a more idiomatic structure for JSON output, adds a meta object that exposes a count and a total, finally converting the whole data in JSON.</p>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>The final result of this initial prototype shows that there’s a lot of potential in this approach.</p>
+
+<p>Postgres is excellent at storing and slicing data in the format we need and some basic optimisations can take us a long way even when data grows to potentially millions of rows (this just means that materialized views take longer to be generated).</p>
+
+<p>Clojure and the libraries used allowed me to expose Postgres data with a minimal translation effort (it’s just sql) and very little code.</p>
+
+<p>Next time, I plan to explore the other side of the diagram and focus on the data collection and real time processing, which I think it’s gonna be a perfect fit for <a href="http://elixir-lang.org/">Elixir</a>.</p>
+
+  </article>
+
+</div>
+
+
+      <footer class="site-footer">
+  <p>What are you waiting for? Send us an <a class="email" href="mailto:info@fullyforged.com?subject=Hello">email</a>.
+  Follow us on <a class="twitter" href="https://twitter.com/fully_forged">Twitter</a>. Or <a class="github" href="https://github.com/fully-forged">GitHub</a>.</p>
+  <div class="contacts">
+    <span class="tel">+447742143400</span>
+    <span class="email">info@fullyforged.com</span>
+  </div>
+  <div id="hcard-Claudio-Ortolina" class="vcard">
+    <span class="org">Fully Forged Ltd.</span>
+    <div class="adr">
+      <span class="street-address">44, North Point</span>
+      <span class="locality">London</span>
+      <span class="postal-code">N8 7HF</span>
+      <div class="country-name">United Kingdom</div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-66151638-1', 'auto');
+      ga('send', 'pageview');
+
+    </script>
+    <script src="//use.typekit.net/lys8xqy.js"></script>
+    <script>try{Typekit.load();}catch(e){}</script>
+
+    
+  </body>
+
+</html>

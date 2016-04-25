@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Monitoring an external tcp service in Elixir</title>
+  <meta name="description" content="More often than not an application depends on external services, like databases or message brokers. How can we handle failures in those services? In this blo...">
+  <meta property="og:description" content="More often than not an application depends on external services, like databases or message brokers. How can we handle failures in those services? In this blo...">
+  <meta property="og:site_name" content="Fully Forged">
+  <meta property="og:url" content="http://www.fullyforged.com/2016/01/25/monitoring-an-external-tcp-service-in-elixir.html">
+  <meta property="og:image" content="http://www.fullyforged.com/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png">
+
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="/assets/main-e64179a441158e60026a2fb2d9cb5f1d.css">
+  <link rel="canonical" href="http://www.fullyforged.com/2016/01/25/monitoring-an-external-tcp-service-in-elixir.html">
+  <link rel="alternate" type="application/rss+xml" title="Fully Forged" href="http://www.fullyforged.com/feed.xml" />
+  <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <script>window.html5 || document.write('<script src="js/vendor/html5shiv.js"><\/script>')</script>
+  <![endif]-->
+</head>
+
+
+  <body>
+
+    <div id="main">
+
+      <header class="site-header">
+  <a href="/">
+    <img src="/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png" alt="Logo">
+  </a>
+  <nav>
+    <a href="/#work">Work</a>
+    <a href="/blog.html">Words</a>
+    <a href="mailto:info@fullyforged.com?subject=Hello"><span>Hire</span> <span>us</span></a>
+  </nav>
+</header>
+
+
+      <div id="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Monitoring an external tcp service in Elixir</h1>
+    <p class="post-meta">Monday 25 January 2016</p>
+  </header>
+
+  <article class="post-content">
+    <p>More often than not an application depends on external services, like databases or message brokers. How can we handle failures in those services? In this blog post we’ll look at how to implement a simple health status checker process that will help us surviving those crashes.</p>
+
+<!--more-->
+
+<h1 id="what-were-building">What we’re building</h1>
+
+<p>Let’s start from what we want to achieve and let’s use, as an example, database availability. A deceptively simple requirement can be: <strong>if the database goes down, I want my application to try and reconnect. After 10 unsuccesful attempts, I want to switch to a replacement service.</strong></p>
+
+<p>This requirement means that our Health Status Checker (HSC) process needs to:</p>
+
+<ul>
+  <li>constantly monitor the database server by opening a tcp connection to it</li>
+  <li>if the connection drops, try to reconnect</li>
+  <li>if the reconnect is successful, restore the application to a stable state</li>
+  <li>if it fails 10 times in a row, switch to a replacement service</li>
+</ul>
+
+<h1 id="step-1-creating-the-hsc-worker">Step 1: creating the HSC worker</h1>
+
+<p>We can start by creating a new worker that can be inserted into the top-level supervision tree of our application.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">HSC</span> <span class="k">do</span>
+  <span class="kn">use</span> <span class="no">GenServer</span>
+
+  <span class="k">def</span> <span class="n">start_link</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="no">GenServer</span><span class="o">.</span><span class="n">start_link</span><span class="p">(</span><span class="bp">__MODULE__</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>This worker needs to accept some options on start, as we will need to pass host and port.</p>
+
+<p>We can then add it to the main supervision tree (usually in <code class="highlighter-rouge">lib/&lt;name-of-your-app&gt;.ex</code>).</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  <span class="k">def</span> <span class="n">start</span><span class="p">(</span><span class="n">_type</span><span class="p">,</span> <span class="n">_args</span><span class="p">)</span> <span class="k">do</span>
+    <span class="kn">import</span> <span class="no">Supervisor</span><span class="o">.</span><span class="no">Spec</span><span class="p">,</span> <span class="ss">warn:</span> <span class="no">false</span>
+
+    <span class="n">opts</span> <span class="o">=</span> <span class="p">[</span><span class="ss">host:</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">,</span> <span class="ss">port:</span> <span class="m">5432</span><span class="p">]</span>
+
+    <span class="n">children</span> <span class="o">=</span> <span class="p">[</span>
+      <span class="c1"># Define workers and child supervisors to be supervised</span>
+      <span class="n">worker</span><span class="p">(</span><span class="no">HSC</span><span class="p">,</span> <span class="p">[</span><span class="n">opts</span><span class="p">]),</span>
+    <span class="p">]</span>
+    <span class="o">...</span>
+  <span class="k">end</span>
+</code></pre>
+</div>
+
+<h1 id="step-2-connect-to-the-tcp-service">Step 2: connect to the tcp service</h1>
+
+<p>To connect to the external service, we’ll leverage the built-in <code class="highlighter-rouge">gen_tcp</code> module <a href="http://www.erlang.org/doc/man/gen_tcp.html">provided by Erlang</a>. I’d recommend a thorough read of the manual page, as <code class="highlighter-rouge">gen_tcp</code> is extremely powerful.</p>
+
+<p>As we’re using <code class="highlighter-rouge">GenServer</code>, we can override <code class="highlighter-rouge">init/1</code>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  <span class="k">defmodule</span> <span class="no">HSC</span> <span class="k">do</span>
+    <span class="kn">use</span> <span class="no">GenServer</span>
+
+    <span class="k">def</span> <span class="n">start_link</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+      <span class="no">GenServer</span><span class="o">.</span><span class="n">start_link</span><span class="p">(</span><span class="bp">__MODULE__</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="n">init</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+      <span class="n">host</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:host</span><span class="p">,</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">)</span> <span class="o">|&gt;</span> <span class="no">String</span><span class="o">.</span><span class="n">to_char_list</span>
+      <span class="n">port</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">fetch!</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:port</span><span class="p">)</span>
+      <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span> <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="p">[]}</span>
+        <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span> <span class="p">{</span><span class="ss">:stop</span><span class="p">,</span> <span class="ss">:connection_failed</span><span class="p">}</span>
+      <span class="k">end</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+</code></pre>
+</div>
+
+<p>This implementation tries to connect to the server: in case of success, the worker starts normally. In case of failure, it stops, taking down the entire application (for more information about return values in <code class="highlighter-rouge">init/1</code>, see <a href="http://elixir-lang.org/docs/stable/elixir/GenServer.html#c:init/1">the docs</a>).</p>
+
+<p>We can also see that <code class="highlighter-rouge">:gen_tcp.connect/3</code> requires us to cast the host to a char list (this is quite frequent when using Erlang libraries). In case you need to pass an IP address, it needs to be in a tuple form (<code class="highlighter-rouge"><span class="p">{</span><span class="err">127,0,0,1</span><span class="p">}</span></code>). Regarding option handling, we can see two different approaches: we fall back to a default for the <code class="highlighter-rouge">host</code>, but require a <code class="highlighter-rouge">port</code> to be supplied explicitly.</p>
+
+<p>At this point, the <code class="highlighter-rouge">HSC</code> worker has very limited usefulness: we need to tackle the idea of retries. For starters, we’ll focus on retrying the initial connection attempt.</p>
+
+<h1 id="step-3-retrying-the-initial-connection-attempt">Step 3: retrying the initial connection attempt</h1>
+
+<p>As our external service can be unavailable at application boot time, we need to think about how to reconnect.</p>
+
+<p>Let’s start by saying: “We want to retry indefinitely every second”.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">HSC</span> <span class="k">do</span>
+  <span class="kn">use</span> <span class="no">GenServer</span>
+  <span class="nv">@retry_interval</span> <span class="m">1000</span>
+
+  <span class="o">...</span>
+
+  <span class="k">def</span> <span class="n">init</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:host</span><span class="p">,</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">)</span> <span class="o">|&gt;</span> <span class="no">String</span><span class="o">.</span><span class="n">to_char_list</span>
+    <span class="n">port</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">fetch!</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:port</span><span class="p">)</span>
+    <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="p">{</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">}}</span>
+      <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="p">{</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">},</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">handle_info</span><span class="p">(</span><span class="ss">:timeout</span><span class="p">,</span> <span class="p">{</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">})</span> <span class="k">do</span>
+    <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">{</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">}}</span>
+      <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">{</span><span class="n">host</span><span class="p">,</span> <span class="n">port</span><span class="p">},</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+<span class="o">...</span>
+</code></pre>
+</div>
+
+<p>We need to revise a few things:</p>
+
+<ul>
+  <li>in case of failure, we don’t stop the worker, but return a <code class="highlighter-rouge"><span class="p">{</span><span class="err">:ok,</span><span class="w"> </span><span class="err">state,</span><span class="w"> </span><span class="err">timeout</span><span class="p">}</span></code> response. This means that in <code class="highlighter-rouge">1000</code> milliseconds, our worker will receive a <code class="highlighter-rouge">:timeout</code> message, which we handle with <code class="highlighter-rouge">handle_info/2</code>. In this callback, we repeat the pattern: try to connect and send a timeout in case of failure.</li>
+  <li>we need to keep <code class="highlighter-rouge">host</code> and <code class="highlighter-rouge">port</code> in our GenServer state, as we need to pass them around between <code class="highlighter-rouge">GenServer</code> callbacks. As a first step, we can use a tuple, but this doesn’t scale well. We will revise this data structure in the next step.</li>
+</ul>
+
+<h1 id="step-4-stop-after-10-attempts">Step 4: stop after 10 attempts</h1>
+
+<p>Instead of retrying indefinitely, we want to switch back to an in-memory service replacement after ten attempts. This implies that we need to keep an attempt counter in the state. Before doing that, let’s refactor and use a better data structure.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">HSC</span> <span class="k">do</span>
+  <span class="kn">use</span> <span class="no">GenServer</span>
+
+  <span class="k">defmodule</span> <span class="no">State</span> <span class="k">do</span>
+    <span class="n">defstruct</span> <span class="ss">host:</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">,</span>
+              <span class="ss">port:</span> <span class="m">1234</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">start_link</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="no">GenServer</span><span class="o">.</span><span class="n">start_link</span><span class="p">(</span><span class="bp">__MODULE__</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">init</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">opts_to_initial_state</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span>
+    <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">state</span><span class="p">}</span>
+      <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">handle_info</span><span class="p">(</span><span class="ss">:timeout</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span> <span class="k">do</span>
+    <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="n">state</span><span class="p">}</span>
+      <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">defp</span> <span class="n">opts_to_initial_state</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:host</span><span class="p">,</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">)</span> <span class="o">|&gt;</span> <span class="no">String</span><span class="o">.</span><span class="n">to_char_list</span>
+    <span class="n">port</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">fetch!</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:port</span><span class="p">)</span>
+    <span class="p">%</span><span class="no">State</span><span class="p">{</span><span class="ss">host:</span> <span class="n">host</span><span class="p">,</span> <span class="ss">port:</span> <span class="n">port</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We introduce a <code class="highlighter-rouge">State</code> struct which gets populated from <code class="highlighter-rouge">opts</code>. We can then adapt the rest of the code to use it. This also simplifies the callbacks code, as we don’t have pattern match on the state tuple anymore. We can now more comfortably handle the maximum number of retries feature.</p>
+
+<p>Tracking the failure count can be implemented as follows:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">State</span> <span class="k">do</span>
+  <span class="n">defstruct</span> <span class="ss">host:</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">,</span>
+            <span class="ss">port:</span> <span class="m">1234</span><span class="p">,</span>
+            <span class="ss">failure_count:</span> <span class="m">0</span>
+<span class="k">end</span>
+
+<span class="o">...</span>
+
+<span class="k">def</span> <span class="n">init</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+  <span class="n">state</span> <span class="o">=</span> <span class="n">opts_to_initial_state</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span>
+  <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+    <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">state</span><span class="p">}</span>
+    <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">1</span><span class="p">},</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+<span class="k">def</span> <span class="n">handle_info</span><span class="p">(</span><span class="ss">:timeout</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="p">%</span><span class="no">State</span><span class="p">{</span><span class="ss">failure_count:</span> <span class="n">failure_count</span><span class="p">})</span> <span class="k">do</span>
+  <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+    <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">0</span><span class="p">}}</span>
+    <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="n">failure_count</span> <span class="o">+</span> <span class="m">1</span><span class="p">},</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We add a new property to <code class="highlighter-rouge">State</code> and update/reset its value accordingly depending on the outcome of every <code class="highlighter-rouge">:gen_tcp.connect/3</code> call.</p>
+
+<p>Tracking the failure count is just the first half of this feature: next is stopping the process when reaching 10 consecutive failures.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">HSC</span> <span class="k">do</span>
+  <span class="kn">use</span> <span class="no">GenServer</span>
+  <span class="nv">@retry_interval</span> <span class="m">1000</span>
+  <span class="nv">@max_retries</span> <span class="m">10</span>
+
+  <span class="o">...</span>
+
+  <span class="k">def</span> <span class="n">handle_info</span><span class="p">(</span><span class="ss">:timeout</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="p">%</span><span class="no">State</span><span class="p">{</span><span class="ss">failure_count:</span> <span class="n">failure_count</span><span class="p">})</span> <span class="k">do</span>
+    <span class="k">if</span> <span class="n">failure_count</span> <span class="o">&lt;=</span> <span class="nv">@max_retries</span> <span class="k">do</span>
+      <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+          <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">0</span><span class="p">}}</span>
+        <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+          <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="n">failure_count</span> <span class="o">+</span> <span class="m">1</span><span class="p">},</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+      <span class="k">end</span>
+    <span class="k">else</span>
+      <span class="p">{</span><span class="ss">:stop</span><span class="p">,</span> <span class="ss">:max_retry_exceeded</span><span class="p">,</span> <span class="n">state</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We stop the worker by returning <code class="highlighter-rouge"><span class="p">{</span><span class="err">:stop,</span><span class="w"> </span><span class="err">reason,</span><span class="w"> </span><span class="err">state</span><span class="p">}</span></code> as we did in the beginning. At this point the worker will be restarted by the supervisor and will conform to its strategy.</p>
+
+<p>By default the <code class="highlighter-rouge">Supervisor</code> will restart this worker a maximum of 3 times over 5 seconds (see <a href="http://elixir-lang.org/docs/stable/elixir/Supervisor.Spec.html#supervise/2">the documentation for <code class="highlighter-rouge">supervise/2</code></a> for more details on how to change that), while the worker’s lifetime, in case of continuous failure, is at least 10 seconds (1 second interval, 10 retries). With this configuration, <strong>it will never crash the top level supervisor</strong>.</p>
+
+<h1 id="step-5-handling-connection-failures">Step 5: handling connection failures</h1>
+
+<p>So far we focused on the behaviour needed to implement the initial connection, but we also need to think about how to react when the connection breaks.</p>
+
+<p>When using <code class="highlighter-rouge">:gen_tcp.connect/3</code>, the calling process will receive messages sent to the socket: we’re interested into <code class="highlighter-rouge">:tcp_closed</code>, which is the message received when the connection closes. We can implement <code class="highlighter-rouge">handle_info/2</code> to handle it:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">handle_info</span><span class="p">({</span><span class="ss">:tcp_closed</span><span class="p">,</span> <span class="n">_socket</span><span class="p">},</span> <span class="n">state</span><span class="p">)</span> <span class="k">do</span>
+  <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+    <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">0</span><span class="p">}}</span>
+    <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">1</span><span class="p">},</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>When the connection closes, we try to reconnect, once again setting the failure counts to the right values.</p>
+
+<h1 id="step-6-callbacks">Step 6: callbacks</h1>
+
+<p>We’re now tracking the complete lifecycle of our tcp connection, so we can focus on exposing callbacks to act on disconnect/reconnect/failure events. There are different strategies we can follow for this: one option is to initialized the <code class="highlighter-rouge">HSC</code> worker with the <code class="highlighter-rouge">pid</code> of another process that will receive messages for the aforementioned events, another is to simply pass the callback functions with the rest of the configuration. We’ll stick with the latter for now, as the former requires a more extended process infrastructure.</p>
+
+<p>We can revise our application entry point as follows:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code>  <span class="k">def</span> <span class="n">start</span><span class="p">(</span><span class="n">_type</span><span class="p">,</span> <span class="n">_args</span><span class="p">)</span> <span class="k">do</span>
+    <span class="kn">import</span> <span class="no">Supervisor</span><span class="o">.</span><span class="no">Spec</span><span class="p">,</span> <span class="ss">warn:</span> <span class="no">false</span>
+
+    <span class="n">children</span> <span class="o">=</span> <span class="p">[</span>
+      <span class="c1"># Define workers and child supervisors to be supervised</span>
+      <span class="n">worker</span><span class="p">(</span><span class="no">HSC</span><span class="p">,</span> <span class="p">[</span><span class="n">hsc_config</span><span class="p">]),</span>
+    <span class="p">]</span>
+    <span class="o">...</span>
+  <span class="k">end</span>
+  
+  <span class="k">defp</span> <span class="n">hsc_config</span> <span class="k">do</span>
+    <span class="p">[</span><span class="ss">host:</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">,</span>
+     <span class="ss">port:</span> <span class="m">5432</span><span class="p">,</span>
+     <span class="ss">on_connect:</span> <span class="k">fn</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="no">Logger</span><span class="o">.</span><span class="n">info</span> <span class="sd">"</span><span class="s2">connected"</span> <span class="k">end</span><span class="p">,</span>
+     <span class="ss">on_disconnect:</span> <span class="k">fn</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="no">Logger</span><span class="o">.</span><span class="n">error</span> <span class="sd">"</span><span class="s2">disconnected"</span> <span class="k">end</span><span class="p">,</span>
+     <span class="ss">on_failure:</span> <span class="k">fn</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="no">MyApp</span><span class="o">.</span><span class="n">use_in_memory_store</span> <span class="k">end</span><span class="p">]</span>
+  <span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Our ideal api exposes 3 functions, <code class="highlighter-rouge">on_connect/1</code>, <code class="highlighter-rouge">on_disconnect/1</code> and <code class="highlighter-rouge">on_failure/1</code>, that will receive the <code class="highlighter-rouge">HSC</code> worker state as an argument. This way we can use the state information to print a logline, etc. In the <code class="highlighter-rouge">on_connect/1</code> function we can do whatever’s needed to restore the health of our application, for example calling <code class="highlighter-rouge">Applicaton.ensure_started/2</code> to restart (if needed) our external service dependant application. If we were monitoring a Postgresql server and using <a href="https://github.com/elixir-lang/ecto">Ecto</a>, we could call:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="no">Application</span><span class="o">.</span><span class="n">ensure_started</span><span class="p">(</span><span class="ss">:poolboy</span><span class="p">)</span>
+<span class="no">Application</span><span class="o">.</span><span class="n">ensure_started</span><span class="p">(</span><span class="ss">:ecto</span><span class="p">)</span>
+<span class="no">MyApp</span><span class="o">.</span><span class="n">use_external_store</span>
+</code></pre>
+</div>
+
+<p>These semantics may not be enough, depending on how complicated the use case is. If we switch to a in-memory alternative, for example, we may need to migrate that data to the external service when back up.</p>
+
+<p>As for the implementation of the three callbacks, we can revise the <code class="highlighter-rouge">HSC</code> module by extending its <code class="highlighter-rouge">State</code> struct definition and calling the relevant callbacks where needed:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">HSC</span> <span class="k">do</span>
+  <span class="kn">use</span> <span class="no">GenServer</span>
+
+  <span class="nv">@max_retries</span> <span class="m">10</span>
+  <span class="nv">@retry_interval</span> <span class="m">1000</span>
+
+  <span class="k">defmodule</span> <span class="no">DefaultCallbacks</span> <span class="k">do</span>
+    <span class="kn">require</span> <span class="no">Logger</span>
+
+    <span class="k">def</span> <span class="n">on_connect</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="k">do</span>
+      <span class="no">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sd">"</span><span class="s2">tcp connect to </span><span class="si">#{</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">#{</span><span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="n">on_disconnect</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="k">do</span>
+      <span class="no">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sd">"</span><span class="s2">tcp disconnect from </span><span class="si">#{</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">#{</span><span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="n">on_failure</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="k">do</span>
+      <span class="no">Logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sd">"</span><span class="s2">tcp failure from </span><span class="si">#{</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">#{</span><span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="si">}</span><span class="s2">. Max retries exceeded."</span><span class="p">)</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">defmodule</span> <span class="no">State</span> <span class="k">do</span>
+    <span class="n">defstruct</span> <span class="ss">host:</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">,</span>
+              <span class="ss">port:</span> <span class="m">1234</span><span class="p">,</span>
+              <span class="ss">failure_count:</span> <span class="m">0</span><span class="p">,</span>
+              <span class="ss">on_connect:</span> <span class="o">&amp;</span><span class="no">DefaultCallbacks</span><span class="o">.</span><span class="n">on_connect</span><span class="o">/</span><span class="m">1</span><span class="p">,</span>
+              <span class="ss">on_disconnect:</span> <span class="o">&amp;</span><span class="no">DefaultCallbacks</span><span class="o">.</span><span class="n">on_disconnect</span><span class="o">/</span><span class="m">1</span><span class="p">,</span>
+              <span class="ss">on_failure:</span> <span class="o">&amp;</span><span class="no">DefaultCallbacks</span><span class="o">.</span><span class="n">on_failure</span><span class="o">/</span><span class="m">1</span>
+
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">start_link</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="no">GenServer</span><span class="o">.</span><span class="n">start_link</span><span class="p">(</span><span class="bp">__MODULE__</span><span class="p">,</span> <span class="n">opts</span><span class="p">)</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">init</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">opts_to_initial_state</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span>
+    <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+      <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">on_connect</span><span class="o">.</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">state</span><span class="p">}</span>
+      <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+        <span class="n">new_state</span> <span class="o">=</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">1</span><span class="p">}</span>
+        <span class="n">new_state</span><span class="o">.</span><span class="n">on_disconnect</span><span class="o">.</span><span class="p">(</span><span class="n">new_state</span><span class="p">)</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">new_state</span><span class="p">,</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="n">handle_info</span><span class="p">(</span><span class="ss">:timeout</span><span class="p">,</span> <span class="n">state</span> <span class="o">=</span> <span class="p">%</span><span class="no">State</span><span class="p">{</span><span class="ss">failure_count:</span> <span class="n">failure_count</span><span class="p">})</span> <span class="k">do</span>
+    <span class="k">if</span> <span class="n">failure_count</span> <span class="o">&lt;=</span> <span class="nv">@max_retries</span> <span class="k">do</span>
+      <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+        <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+          <span class="n">new_state</span> <span class="o">=</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">0</span><span class="p">}</span>
+          <span class="n">new_state</span><span class="o">.</span><span class="n">on_connect</span><span class="o">.</span><span class="p">(</span><span class="n">new_state</span><span class="p">)</span>
+          <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="n">new_state</span><span class="p">}</span>
+        <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+          <span class="n">new_state</span> <span class="o">=</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="n">failure_count</span> <span class="o">+</span> <span class="m">1</span><span class="p">}</span>
+          <span class="n">new_state</span><span class="o">.</span><span class="n">on_disconnect</span><span class="o">.</span><span class="p">(</span><span class="n">new_state</span><span class="p">)</span>
+          <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="n">new_state</span><span class="p">,</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+      <span class="k">end</span>
+    <span class="k">else</span>
+      <span class="n">state</span><span class="o">.</span><span class="n">on_failure</span><span class="o">.</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+      <span class="p">{</span><span class="ss">:stop</span><span class="p">,</span> <span class="ss">:max_retry_exceeded</span><span class="p">,</span> <span class="n">state</span><span class="p">}</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+<span class="k">def</span> <span class="n">handle_info</span><span class="p">({</span><span class="ss">:tcp_closed</span><span class="p">,</span> <span class="n">_socket</span><span class="p">},</span> <span class="n">state</span><span class="p">)</span> <span class="k">do</span>
+  <span class="k">case</span> <span class="ss">:gen_tcp</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">port</span><span class="p">,</span> <span class="p">[])</span> <span class="k">do</span>
+    <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_socket</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="n">new_state</span> <span class="o">=</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">0</span><span class="p">}</span>
+      <span class="n">new_state</span><span class="o">.</span><span class="n">on_connect</span><span class="o">.</span><span class="p">(</span><span class="n">new_state</span><span class="p">)</span>
+      <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="n">new_state</span><span class="p">}</span>
+    <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="n">_reason</span><span class="p">}</span> <span class="o">-&gt;</span>
+      <span class="n">new_state</span> <span class="o">=</span> <span class="p">%{</span><span class="n">state</span> <span class="o">|</span> <span class="ss">failure_count:</span> <span class="m">1</span><span class="p">}</span>
+      <span class="n">new_state</span><span class="o">.</span><span class="n">on_disconnect</span><span class="o">.</span><span class="p">(</span><span class="n">new_state</span><span class="p">)</span>
+      <span class="p">{</span><span class="ss">:noreply</span><span class="p">,</span> <span class="n">new_state</span><span class="p">,</span> <span class="nv">@retry_interval</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+  <span class="k">defp</span> <span class="n">opts_to_initial_state</span><span class="p">(</span><span class="n">opts</span><span class="p">)</span> <span class="k">do</span>
+    <span class="n">host</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:host</span><span class="p">,</span> <span class="sd">"</span><span class="s2">localhost"</span><span class="p">)</span> <span class="o">|&gt;</span> <span class="no">String</span><span class="o">.</span><span class="n">to_char_list</span>
+    <span class="n">port</span> <span class="o">=</span> <span class="no">Keyword</span><span class="o">.</span><span class="n">fetch!</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="ss">:port</span><span class="p">)</span>
+    <span class="p">%</span><span class="no">State</span><span class="p">{</span><span class="ss">host:</span> <span class="n">host</span><span class="p">,</span> <span class="ss">port:</span> <span class="n">port</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Note that we define a <code class="highlighter-rouge">DefaultCallbacks</code> module that logs via <code class="highlighter-rouge">Logger</code> and then proceed to use the newly defined callbacks throughout the rest of the module, paying attention to modify the state <strong>before</strong> passing it to the functions (otherwise we would log incorrect failure counts).</p>
+
+<h1 id="where-do-we-go-from-here">Where do we go from here</h1>
+
+<p>There’s much more that we could build into this module: staggered retries, tcp connection timeout, extend configurability. All of these ideas can be built on top of the patterns we’ve seen, so they’re left as an exercise for the reader. In addition, in a production scenario we may need to use a more sophisticated approach to retries, maybe leveraging a library like <a href="https://github.com/ferd/backoff">backoff</a>.</p>
+
+<p>In this post we’ve seen how to use Elixir to increase the resiliency of our application when dependant on external services by building a simple healthcheck monitor. Please feel free to reach out with questions and/or suggestions on how to improve this!</p>
+
+<p>Thanks to <a href="http://www.theerlangelist.com">Saša Jurić</a> and <a href="http://www.51degrees.net">Olly Legg</a> for their feedback on the initial draft.</p>
+
+  </article>
+
+</div>
+
+
+      <footer class="site-footer">
+  <p>What are you waiting for? Send us an <a class="email" href="mailto:info@fullyforged.com?subject=Hello">email</a>.
+  Follow us on <a class="twitter" href="https://twitter.com/fully_forged">Twitter</a>. Or <a class="github" href="https://github.com/fully-forged">GitHub</a>.</p>
+  <div class="contacts">
+    <span class="tel">+447742143400</span>
+    <span class="email">info@fullyforged.com</span>
+  </div>
+  <div id="hcard-Claudio-Ortolina" class="vcard">
+    <span class="org">Fully Forged Ltd.</span>
+    <div class="adr">
+      <span class="street-address">44, North Point</span>
+      <span class="locality">London</span>
+      <span class="postal-code">N8 7HF</span>
+      <div class="country-name">United Kingdom</div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-66151638-1', 'auto');
+      ga('send', 'pageview');
+
+    </script>
+    <script src="//use.typekit.net/lys8xqy.js"></script>
+    <script>try{Typekit.load();}catch(e){}</script>
+
+    
+  </body>
+
+</html>

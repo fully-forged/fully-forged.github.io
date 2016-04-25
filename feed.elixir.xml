@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+	<channel>
+		<title>Fully Forged - Elixir</title>
+		<description>Posts categorized as 'elixir'</description>
+		<link>http://www.fullyforged.com</link>
+		<atom:link href="http://www.fullyforged.com/feed.elixir.xml" rel="self" type="application/rss+xml" />
+		
+			<item>
+				<title>Monitoring an external tcp service in Elixir</title>
+				
+					<description>&lt;p&gt;More often than not an application depends on external services, like databases or message brokers. How can we handle failures in those services? In this blog post we’ll look at how to implement a simple health status checker process that will help us surviving those crashes.&lt;/p&gt;
+
+</description>
+				
+				<pubDate>Mon, 25 Jan 2016 09:17:00 +0000</pubDate>
+				<link>http://www.fullyforged.com/2016/01/25/monitoring-an-external-tcp-service-in-elixir.html</link>
+				<guid isPermaLink="true">http://www.fullyforged.com/2016/01/25/monitoring-an-external-tcp-service-in-elixir.html</guid>
+			</item>
+		
+			<item>
+				<title>Phoenix and Elm: tracking the connection status</title>
+				
+					<description>&lt;p&gt;When working with &lt;a href=&quot;http://www.phoenixframework.org/docs/channels&quot;&gt;Phoenix channels&lt;/a&gt; and &lt;a href=&quot;http://elm-lang.org&quot;&gt;Elm&lt;/a&gt; it may be useful to keep track of the websockets connection status. In this blog post, we’ll see how this can be accomplished by leveraging interoperability.&lt;/p&gt;
+
+</description>
+				
+				<pubDate>Thu, 21 Jan 2016 10:30:00 +0000</pubDate>
+				<link>http://www.fullyforged.com/2016/01/21/phoenix-and-elm-tracking-the-connection-status.html</link>
+				<guid isPermaLink="true">http://www.fullyforged.com/2016/01/21/phoenix-and-elm-tracking-the-connection-status.html</guid>
+			</item>
+		
+			<item>
+				<title>Using protocols to model data flow</title>
+				
+					<description>&lt;p&gt;For the last few months I’ve been working on a few Elixir applications receiving inputs from different sources: queuing systems, websockets, database notifications. In this post, we’ll look at one possible way to model the architecture of such an application.&lt;/p&gt;
+
+</description>
+				
+				<pubDate>Sat, 14 Nov 2015 15:19:00 +0000</pubDate>
+				<link>http://www.fullyforged.com/2015/11/14/using-protocols-to-model-data-flow.html</link>
+				<guid isPermaLink="true">http://www.fullyforged.com/2015/11/14/using-protocols-to-model-data-flow.html</guid>
+			</item>
+		
+	</channel>
+</rss>

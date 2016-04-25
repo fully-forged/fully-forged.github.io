@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Using protocols to model data flow</title>
+  <meta name="description" content="For the last few months I’ve been working on a few Elixir applications receiving inputs from different sources: queuing systems, websockets, database notific...">
+  <meta property="og:description" content="For the last few months I’ve been working on a few Elixir applications receiving inputs from different sources: queuing systems, websockets, database notific...">
+  <meta property="og:site_name" content="Fully Forged">
+  <meta property="og:url" content="http://www.fullyforged.com/2015/11/14/using-protocols-to-model-data-flow.html">
+  <meta property="og:image" content="http://www.fullyforged.com/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png">
+
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="/assets/main-e64179a441158e60026a2fb2d9cb5f1d.css">
+  <link rel="canonical" href="http://www.fullyforged.com/2015/11/14/using-protocols-to-model-data-flow.html">
+  <link rel="alternate" type="application/rss+xml" title="Fully Forged" href="http://www.fullyforged.com/feed.xml" />
+  <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <script>window.html5 || document.write('<script src="js/vendor/html5shiv.js"><\/script>')</script>
+  <![endif]-->
+</head>
+
+
+  <body>
+
+    <div id="main">
+
+      <header class="site-header">
+  <a href="/">
+    <img src="/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png" alt="Logo">
+  </a>
+  <nav>
+    <a href="/#work">Work</a>
+    <a href="/blog.html">Words</a>
+    <a href="mailto:info@fullyforged.com?subject=Hello"><span>Hire</span> <span>us</span></a>
+  </nav>
+</header>
+
+
+      <div id="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Using protocols to model data flow</h1>
+    <p class="post-meta">Saturday 14 November 2015</p>
+  </header>
+
+  <article class="post-content">
+    <p>For the last few months I’ve been working on a few Elixir applications receiving inputs from different sources: queuing systems, websockets, database notifications. In this post, we’ll look at one possible way to model the architecture of such an application.</p>
+
+<!--more-->
+
+<h2 id="requirements">Requirements</h2>
+
+<p>Our application needs to:</p>
+
+<ul>
+  <li>process messages whose shape can change over time, but affect the system in the same way. In other words, it has to support different versions of the same client at the same time.</li>
+  <li>Provide traceability for an incoming message, so that it can followed through at all stages.</li>
+  <li>notify different clients of certain events after processing the message.</li>
+</ul>
+
+<p>As an example, here’s a more concrete use case:</p>
+
+<ul>
+  <li>The application receives an incoming <a href="https://www.rabbitmq.com">RabbitMQ</a> message: create a report with this data.</li>
+  <li>The application processes the message and creates the resource in the database.</li>
+  <li>Finally, it sends a few different notifications to another message broker (<a href="http://crossbar.io">Crossbar</a>) so that they can piped to any consumer client (browser, mobile, etc.)</li>
+  <li>At every stage, log accordingly, using a <code class="highlighter-rouge">request_id</code> parameter included with the first message to trace the flow all the way through.</li>
+</ul>
+
+<h2 id="approach">Approach</h2>
+
+<p>We’ll heavily leverage polymorphism.</p>
+
+<p>We can structure the application logic by:</p>
+
+<ul>
+  <li>Defining a <a href="http://elixir-lang.org/getting-started/protocols.html">protocol</a> for each step: message decoding, persistence, logging, notification.</li>
+  <li>Define as many versioned structs as we need along each step.</li>
+  <li>Implement each protocol for each struct.</li>
+</ul>
+
+<p>If we apply these ideas, the whole flow can be represented as follows:</p>
+
+<figure class="block-image">
+  <img src="/assets/posts/using-protocols-to-model-data-flow-01-693cdaadb84984f1875ead5fc0327ead.jpg" alt="Protocols diagram" />
+</figure>
+
+<p>In practice:</p>
+
+<ul>
+  <li>as a message comes in, we proceed to identify it and package it as <code class="highlighter-rouge">V1.Reports.Create</code></li>
+  <li>We implement the logging and persistence logic for that specific struct</li>
+  <li>After persistence, we return a <code class="highlighter-rouge">V1.Reports.Created</code> struct</li>
+  <li>Again, we implement logging a notification for that specific struct</li>
+</ul>
+
+<p>This design allows us to:</p>
+
+<ul>
+  <li>split the problem into clear areas of responsibility</li>
+  <li>have explicit guarantees each step of the way: every struct has a predictable set of attributes</li>
+  <li>Unit/property test every step very easily</li>
+  <li>Extend the application by adding more structs, therefore increasing size but maintaining the same level of complexity</li>
+</ul>
+
+<p>In terms of processes layout, here’s how it can look like:</p>
+
+<figure class="block-image">
+  <img src="/assets/posts/using-protocols-to-model-data-flow-02-7f92981b53d6893e613acfe2cc58dc86.jpg" alt="Process diagram" />
+</figure>
+
+<ul>
+  <li>We have one consumer to process and identify an incoming message;</li>
+  <li>The resulting struct is passed to a worker (checked out from a pool). Using a pool allows us not to outperform our database capacity. In this scenario, we have one worker per database connection;</li>
+  <li>After that, we pass the result struct to a notifier pool, which will publish the relevant messages to the other broker;</li>
+  <li>All along the way, we interact with the <code class="highlighter-rouge">Logger</code> module.</li>
+</ul>
+
+<p>This setup mirrors the division of responsibilities we outlined in our protocols, to the point that it naturally leads to reusability across different applications.</p>
+
+<h2 id="code-implementation">Code implementation</h2>
+
+<p>As it’s upractical to show the entire application in a blog post, we’ll focus on some key areas.</p>
+
+<h3 id="general-flow">General flow</h3>
+
+<p>It doesn’t really matter which queuing system we’re using, we just care about a few key properties in the incoming message:</p>
+
+<ul>
+  <li>explicit version</li>
+  <li>a request id that we can forward to the rest of the chain</li>
+  <li>a clear directive/topic on what the message is about</li>
+</ul>
+
+<p>For instance, our message could look like this (using JSON as notation):</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">{</span>
+  <span class="s2">"meta"</span> <span class="err">:</span> <span class="p">{</span>
+    <span class="s2">"version"</span> <span class="err">:</span> <span class="mi">1</span><span class="p">,</span>
+      <span class="s2">"topic"</span> <span class="err">:</span> <span class="s2">"reports"</span><span class="p">,</span>
+      <span class="s2">"type"</span>  <span class="err">:</span> <span class="s2">"create"</span><span class="p">,</span>
+      <span class="s2">"request_id"</span> <span class="err">:</span> <span class="s2">"15456d4e-782b-11e5-8bcf-feff819cdc9f"</span>
+  <span class="p">},</span>
+  <span class="s2">"data"</span> <span class="err">:</span> <span class="p">{</span>
+    <span class="s2">"reference"</span> <span class="err">:</span> <span class="s2">"ABC7193"</span><span class="p">,</span>
+    <span class="s2">"description"</span> <span class="err">:</span> <span class="s2">"He's walking in space!"</span><span class="p">,</span>
+    <span class="s2">"submitted_at"</span> <span class="err">:</span> <span class="s2">"2015-10-27T09:23:24Z"</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre>
+</div>
+
+<p>The format may change (e.g. the topic could be inferred by the queue name itself), but generally speaking this is a good baseline.</p>
+
+<p>In our consumer logic, we want to aim for something along these lines:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="n">message</span>
+  <span class="o">|&gt;</span> <span class="n">identify</span>
+  <span class="o">|&gt;</span> <span class="n">populate</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+  <span class="o">|&gt;</span> <span class="n">log</span>
+  <span class="o">|&gt;</span> <span class="n">process</span>
+  <span class="o">|&gt;</span> <span class="n">log</span>
+  <span class="o">|&gt;</span> <span class="n">acknowledge</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+  <span class="o">|&gt;</span> <span class="n">notify</span>
+  <span class="o">|&gt;</span> <span class="n">log</span>
+</code></pre>
+</div>
+
+<p>We can chain all operations and produce a very readable pipeline. We’ll come back to this structure later on when we talk about error handling.</p>
+
+<h3 id="identifying-the-message">Identifying the message</h3>
+
+<p>Thanks to the metadata included in the message, this is relatively easy.</p>
+
+<p>Let’s first define a <code class="highlighter-rouge">V1.Reports.Create</code> struct.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span> <span class="k">do</span>
+  <span class="n">defstruct</span> <span class="ss">request_id:</span> <span class="no">nil</span><span class="p">,</span> <span class="ss">data:</span> <span class="p">%{}</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Version and topic are expressed by the struct name itself, so we don’t need to store them. We add a <code class="highlighter-rouge">request_id</code> attribute so that we can keep track of the request flow and a <code class="highlighter-rouge">data</code> attribute to store our domain specific data. Note that depending on how strict we want to be we can also opt for something like:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span> <span class="k">do</span>
+  <span class="n">defstruct</span> <span class="ss">request_id:</span> <span class="no">nil</span><span class="p">,</span>
+            <span class="ss">reference:</span> <span class="no">nil</span><span class="p">,</span>
+            <span class="ss">description:</span> <span class="no">nil</span><span class="p">,</span>
+            <span class="ss">submitted_at:</span> <span class="no">nil</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>In our case, we’re gonna stick with <code class="highlighter-rouge">data</code> as we need to be more flexible (our reports may have some additional fields and our database can handle documents with different shapes).</p>
+
+<p>To identify the incoming payload, we can write a function like:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">identify</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span> <span class="k">do</span>
+  <span class="k">case</span> <span class="n">payload</span><span class="o">.</span><span class="n">meta</span> <span class="k">do</span>
+    <span class="p">%{</span><span class="sd">"</span><span class="s2">version"</span> <span class="o">=&gt;</span> <span class="m">1</span><span class="p">,</span> <span class="sd">"</span><span class="s2">topic"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">reports"</span><span class="p">,</span> <span class="sd">"</span><span class="s2">type"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">create"</span><span class="p">}</span> <span class="o">-&gt;</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span>
+    <span class="n">_other</span> <span class="o">-&gt;</span> <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="ss">:unsupported_payload</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We aggressively pattern match to quickly determine the struct to use; this approach scales really well even with a dozen different combinations. Beyond that, we can use metaprogramming to infer the pattern match clause from the list of payload structs available in our codebase (this is left as an exercise to the reader).</p>
+
+<h3 id="populating-the-struct">Populating the struct</h3>
+
+<p>To populate the struct, we can define a <code class="highlighter-rouge">populate/2</code> method:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">populate</span><span class="p">(</span><span class="n">struct_module</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span> <span class="k">do</span>
+  <span class="p">%{</span><span class="sd">"</span><span class="s2">data"</span> <span class="o">=&gt;</span> <span class="n">payload</span><span class="p">[</span><span class="sd">"</span><span class="s2">data"</span><span class="p">],</span>
+    <span class="sd">"</span><span class="s2">request_id"</span> <span class="o">=&gt;</span> <span class="n">payload</span><span class="p">[</span><span class="sd">"</span><span class="s2">meta"</span><span class="p">][</span><span class="sd">"</span><span class="s2">request_id"</span><span class="p">]}</span>
+  <span class="o">|&gt;</span> <span class="no">Enum</span><span class="o">.</span><span class="n">into</span><span class="p">(</span><span class="no">Kernel</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span><span class="n">struct_module</span><span class="p">,</span> <span class="p">%{})</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Using <code class="highlighter-rouge">Enum.into/2</code> assumes that our struct implements the <code class="highlighter-rouge">Collectable</code> protocol. As explained in the <a href="http://elixir-lang.org/docs/v1.1/elixir/Collectable.html">official docs</a>, we can think about this protocol as the counterpart of <code class="highlighter-rouge">Enumerable</code>: where <code class="highlighter-rouge">Enumerable</code> defines how to iterate over a certain data structure, <code class="highlighter-rouge">Collectable</code> expresses how an iterable data structure can be piped into another.</p>
+
+<p>This means that we need to define the <code class="highlighter-rouge">Collectable</code> implementation for <code class="highlighter-rouge">V1.Reports.Create</code>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defimpl</span> <span class="no">Collectable</span><span class="p">,</span> <span class="ss">for:</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">into</span><span class="p">(</span><span class="n">original</span><span class="p">)</span> <span class="k">do</span>
+    <span class="p">{</span><span class="n">original</span><span class="p">,</span> <span class="k">fn</span>
+        <span class="n">s</span><span class="p">,</span> <span class="p">{</span><span class="ss">:cont</span><span class="p">,</span> <span class="p">{</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">}}</span> <span class="o">-&gt;</span> <span class="n">update_struct</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+        <span class="n">s</span><span class="p">,</span> <span class="ss">:done</span> <span class="o">-&gt;</span> <span class="n">s</span>
+        <span class="n">_</span><span class="p">,</span> <span class="ss">:halt</span> <span class="o">-&gt;</span> <span class="ss">:ok</span>
+    <span class="k">end</span><span class="p">}</span>
+  <span class="k">end</span>
+
+  <span class="k">defp</span> <span class="n">update_struct</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="ow">when</span> <span class="n">is_string</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">do</span>
+    <span class="n">update_struct</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="no">String</span><span class="o">.</span><span class="n">to_existing_atom</span><span class="p">(</span><span class="n">k</span><span class="p">),</span> <span class="n">v</span><span class="p">)</span>
+  <span class="k">end</span>
+  <span class="k">defp</span> <span class="n">update_struct</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">do</span>
+    <span class="no">Map</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Our implementation happily accepts a map with either string or atom keys, safely using <code class="highlighter-rouge">String.to_existing_atom/1</code> to handle the conversion .</p>
+
+<p>With this code in place, we can expect to have the following struct as a result:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">%</span><span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span><span class="p">{</span>
+  <span class="ss">request_id:</span> <span class="sd">"</span><span class="s2">15456d4e-782b-11e5-8bcf-feff819cdc9f"</span><span class="p">,</span>
+  <span class="ss">data:</span> <span class="p">%{</span>
+    <span class="sd">"</span><span class="s2">reference"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">ABC7193"</span><span class="p">,</span>
+    <span class="sd">"</span><span class="s2">description"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">He's walking in space!"</span><span class="p">,</span>
+    <span class="sd">"</span><span class="s2">submitted_at"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">2015-10-27T09:23:24Z"</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+</code></pre>
+</div>
+
+<h3 id="logging-part-1">Logging (part 1)</h3>
+
+<p>To log, we’re gonna leverage the standard <code class="highlighter-rouge">Logger</code> library provided by Elixir. The <code class="highlighter-rouge">log/1</code> function we added to our pipeline can be as minimal as:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">log</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">do</span>
+  <span class="ss">:ok</span> <span class="o">=</span> <span class="no">Logger</span><span class="o">.</span><span class="n">info</span> <span class="n">item</span>
+  <span class="n">item</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We return the item itself not to break the pipeline.</p>
+
+<p>In order for this to work, we have to implement another protocol, <code class="highlighter-rouge">String.Chars</code>, which defines how a given type gets converted to a binary. Let’s do that for <code class="highlighter-rouge">V1.Reports.Create</code>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defimpl</span> <span class="no">String</span><span class="o">.</span><span class="no">Chars</span><span class="p">,</span> <span class="ss">for:</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">to_string</span><span class="p">(</span><span class="n">create_struct</span><span class="p">)</span> <span class="k">do</span>
+    <span class="sd">"</span><span class="s2">type=create status=accepted request_id=</span><span class="si">#{</span><span class="n">create_struct</span><span class="o">.</span><span class="n">request_id</span><span class="si">}</span><span class="s2"> reference={create_struct.reference}"</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>It’s important here to decide what matters in terms of tracing a payload through our system: while the <code class="highlighter-rouge">request_id</code> is a given, we can be flexible about other data depending on security/privacy concerns.</p>
+
+<p>We’ll just log the reference, which will allow us to tie this specific logging event with subsequent persistence events. The use case can be: given that I’m looking at a persisted report and I know its reference, when was it created? What events lead to its persistence?</p>
+
+<h3 id="processing-the-struct">Processing the struct</h3>
+
+<p>The processing step is where most of our business logic resides. It’s intentionally left vague as its implementation may change dramatically depending on the intent expressed by the struct name. For these purposes, we’ll once again define a protocol to express this variability, <code class="highlighter-rouge">Processable</code>.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defprotocol</span> <span class="no">Processable</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">process</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>To get this to work, we need to do three things:</p>
+
+<ul>
+  <li>import the protocol where the pipeline is defined: <code class="highlighter-rouge">import Processable</code></li>
+  <li>define its implementation for <code class="highlighter-rouge">V1.Reports.Create</code></li>
+  <li>define <code class="highlighter-rouge">V1.Reports.Created</code>, which we’ll return as expression of the successful processing</li>
+</ul>
+
+<p>The <code class="highlighter-rouge">V1.Reports.Created</code> struct can look like the following</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Created</span> <span class="k">do</span>
+  <span class="n">defstruct</span> <span class="ss">request_id:</span> <span class="no">nil</span><span class="p">,</span> <span class="ss">record:</span> <span class="no">nil</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>As we can see, it exposes the same <code class="highlighter-rouge">request_id</code> attribute we saw before and a record attribute, which will be populate with the struct coming from our database driver. We can now implement the <code class="highlighter-rouge">Processable</code> protocol:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defimpl</span> <span class="no">Processable</span><span class="p">,</span> <span class="ss">for:</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">process</span><span class="p">(</span><span class="n">create_struct</span><span class="p">)</span> <span class="k">do</span>
+    <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">new_record</span><span class="p">}</span> <span class="o">=</span> <span class="no">DB</span><span class="o">.</span><span class="no">Repo</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">create_struct</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+    <span class="p">%</span><span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Created</span><span class="p">{</span><span class="ss">request_id:</span> <span class="n">create_struct</span><span class="o">.</span><span class="n">request_id</span><span class="p">,</span> <span class="ss">record:</span> <span class="n">new_record</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Note that <code class="highlighter-rouge">DB.Repo.create</code> is just an example, the database api will change depending on the persistence layer used.<br />
+One may wonder why we bother wrapping the persisted record in a struct instead of just returning the record itself. The reason is that along with the persisted data, we need to pass two extra pieces of information: the <code class="highlighter-rouge">request_id</code>, which effectively is metadata about the request and not part of the record itself, and <em>the idea that this record has just been created</em>. <code class="highlighter-rouge">V1.Reports.Created</code> expresses both with clarity to the rest of the system, particularly to the subsequent steps in the pipeline.</p>
+
+<h3 id="logging-part-2">Logging (part 2)</h3>
+
+<p>Logging a report creation requires repeating the pattern we used before, i.e. implementing the <code class="highlighter-rouge">String.Chars</code> protocol for <code class="highlighter-rouge">V1.Reports.Created</code>.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defimpl</span> <span class="no">String</span><span class="o">.</span><span class="no">Chars</span><span class="p">,</span> <span class="ss">for:</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Created</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">to_string</span><span class="p">(</span><span class="n">created_struct</span><span class="p">)</span> <span class="k">do</span>
+    <span class="sd">"</span><span class="s2">type=create status=success request_id=</span><span class="si">#{</span><span class="n">created_struct</span><span class="o">.</span><span class="n">request_id</span><span class="si">}</span><span class="s2"> reference={created_struct.record.reference} id=</span><span class="si">#{</span><span class="n">created_struct</span><span class="o">.</span><span class="n">record</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">"</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We still key on the same <code class="highlighter-rouge">type</code> and indicate <code class="highlighter-rouge">success</code> as <code class="highlighter-rouge">status</code>, as we want to confirm that processing has been successful. For ease of search, we also log the same <code class="highlighter-rouge">reference</code> and the database <code class="highlighter-rouge">id</code>. This assumes that both are present in the record that has been persisted by the database. Note that as we define the default value for <code class="highlighter-rouge">V1.Reports.Created.record</code> as <code class="highlighter-rouge">nil</code>, this implementation assumes a fully populated struct.</p>
+
+<h3 id="acknowledging-the-original-message">Acknowledging the original message</h3>
+
+<p>At this point, we can safely acknowledge the message to the client that originally queued it. In RabbitMQ, for example, this means that the message can be safely removed from the queue.</p>
+
+<p>Depending on the setup, this step may not be necessary.</p>
+
+<h3 id="notifications">Notifications</h3>
+
+<p>The last step in our pipeline is notifying another broker that processing has completed.</p>
+
+<p>A notification message is defined by two attributes:<br />
+- a list of topics<br />
+- a payload</p>
+
+<p>In code:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defmodule</span> <span class="no">Message</span> <span class="k">do</span>
+  <span class="n">defstruct</span> <span class="ss">request_id:</span> <span class="no">nil</span><span class="p">,</span> <span class="ss">topics:</span> <span class="p">[],</span> <span class="ss">data:</span> <span class="p">%{}</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Consequently, we can expose our pubsub layer via a <code class="highlighter-rouge">PubSub.publish/1</code> function which will happily accept <code class="highlighter-rouge">Message</code> structs.</p>
+
+<p>Lastly, we can create a <code class="highlighter-rouge">Notification</code> protocol that will define how to go from a given struct to a <code class="highlighter-rouge">Message</code>.</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defimpl</span> <span class="no">Notification</span><span class="p">,</span> <span class="ss">for:</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Created</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">process</span><span class="p">(</span><span class="n">created_struct</span><span class="p">)</span> <span class="k">do</span>
+    <span class="p">%</span><span class="no">Message</span><span class="p">{</span>
+      <span class="ss">request_id:</span> <span class="n">created_struct</span><span class="o">.</span><span class="n">request_id</span><span class="p">,</span>
+      <span class="ss">topics:</span> <span class="p">[</span><span class="sd">"</span><span class="s2">v1.reports"</span><span class="p">],</span>
+      <span class="ss">data:</span> <span class="no">Map</span><span class="o">.</span><span class="n">from_struct</span><span class="p">(</span><span class="n">created_struct</span><span class="o">.</span><span class="n">record</span><span class="p">)</span>
+    <span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>The list of topics can be extracted if needed.</p>
+
+<p>Finally, let’s go back to the <code class="highlighter-rouge">notify/1</code> function used in the pipeline:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">notify</span><span class="p">(</span><span class="n">item</span><span class="p">)</span> <span class="k">do</span>
+  <span class="no">Notification</span><span class="o">.</span><span class="n">process</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+  <span class="o">|&gt;</span> <span class="no">PubSub</span><span class="o">.</span><span class="n">publish</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>The last step, logging the notification, is identical for all <code class="highlighter-rouge">Message</code> structs:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">defimpl</span> <span class="no">String</span><span class="o">.</span><span class="no">Chars</span><span class="p">,</span> <span class="ss">for:</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Created</span> <span class="k">do</span>
+  <span class="k">def</span> <span class="n">to_string</span><span class="p">(</span><span class="n">message_struct</span><span class="p">)</span> <span class="k">do</span>
+    <span class="sd">"</span><span class="s2">type=publish request_id=</span><span class="si">#{</span><span class="n">message_struct</span><span class="o">.</span><span class="n">request_id</span><span class="si">}</span><span class="s2"> topics=</span><span class="si">#{</span><span class="n">format_topics</span><span class="p">(</span><span class="n">message_struct</span><span class="o">.</span><span class="n">topics</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+  <span class="k">end</span>
+
+  <span class="k">defp</span> <span class="n">format_topics</span><span class="p">(</span><span class="n">topics</span><span class="p">)</span> <span class="k">do</span>
+    <span class="no">Enum</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">topics</span><span class="p">,</span> <span class="sd">"</span><span class="s2">,"</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>Another option is to log one line per topic, but for simplicity reasons we’ll skip that.</p>
+
+<h2 id="process-layout">Process layout</h2>
+
+<p>So far we’ve treated this pipeline as a single-threaded flow, but as we outlined before this should not be the case.</p>
+
+<p>A common scenario is to have:</p>
+
+<ul>
+  <li>a consumers pool, whose job is picking up a message from the queue and eventually acknowledging its successful handling;</li>
+  <li>a worker pool, hidden behind <code class="highlighter-rouge">process/1</code>: the processing operation can assume a valid, well-formed struct and the resulting code will be easier to maintain;</li>
+  <li>a notifiers pool, this time hidden behind <code class="highlighter-rouge">notify/1</code>. By using a pool we can control the pressure put on the external broker, especially because a single job can trigger many different notifications.</li>
+</ul>
+
+<p>All of these techniques can leverage existing libraries in the BEAM ecosystem, so we won’t cover them here.</p>
+
+<h2 id="error-handling">Error handling</h2>
+
+<p>To improve traceability of our pipeline, we want to be able to clearly log failures along the way, knowing exactly which step failed. It’s theoretically possible to infer this from a stack-trace, but it gets unwieldy pretty quickly.</p>
+
+<p>Elixir will introduce a <code class="highlighter-rouge">with</code> operator to model a computation dependent on one or more preconditions (see the relevant issue <a href="https://github.com/elixir-lang/elixir/issues/3902">here</a>). For the time being, we can use some macros inspired by the ideas behind Railway oriented programming (see the <a href="http://zohaib.me/railway-programming-pattern-in-elixir/">Elixir specific blog post here</a> and <a href="http://fsharpforfunandprofit.com/rop/">the theory behind it here</a>).</p>
+
+<p>The core of it is that every step of our pipeline will either return <code class="highlighter-rouge"><span class="p">{</span><span class="err">:ok,</span><span class="w"> </span><span class="err">result</span><span class="p">}</span></code> or <code class="highlighter-rouge"><span class="p">{</span><span class="err">:error,</span><span class="w"> </span><span class="err">reason</span><span class="p">}</span></code>, which will allows us either to proceed to the following step or shortcut out of the pipeline and return an error. In other languages, this idea is formalized at the core level as a monad (e.g. Haskell, where it’s defined as a <a href="https://hackage.haskell.org/package/base-4.6.0.1/docs/Data-Either.html#t:Either">Either</a> type).</p>
+
+<p>Let’s revise the main flow accordingly:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">message</span><span class="p">}</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">identify</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">populate</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">log</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">process</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">log</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">acknowledge</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">notify</span>
+  <span class="o">&gt;&gt;&gt;</span> <span class="n">log</span>
+</code></pre>
+</div>
+
+<p>Except for the final step, where we log the result and pattern match on either a success or an error tuple, we can replace every <code class="highlighter-rouge">|&gt;</code> with <code class="highlighter-rouge">&gt;&gt;&gt;</code> and tweak our implementations accordingly.</p>
+
+<p>For example, let’s update <code class="highlighter-rouge">identify/1</code>:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">identify</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span> <span class="k">do</span>
+  <span class="k">case</span> <span class="n">payload</span><span class="o">.</span><span class="n">meta</span> <span class="k">do</span>
+    <span class="p">%{</span><span class="sd">"</span><span class="s2">version"</span> <span class="o">=&gt;</span> <span class="m">1</span><span class="p">,</span> <span class="sd">"</span><span class="s2">topic"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">reports"</span><span class="p">,</span> <span class="sd">"</span><span class="s2">type"</span> <span class="o">=&gt;</span> <span class="sd">"</span><span class="s2">create"</span><span class="p">}</span> <span class="o">-&gt;</span> <span class="p">{</span><span class="ss">:ok</span><span class="p">,</span> <span class="no">V1</span><span class="o">.</span><span class="no">Reports</span><span class="o">.</span><span class="no">Create</span><span class="p">}</span>
+    <span class="n">_other</span> <span class="o">-&gt;</span> <span class="p">{</span><span class="ss">:error</span><span class="p">,</span> <span class="ss">:unsupported_payload</span><span class="p">}</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>We wrapped the positive result in a tuple, a minimal change with a great benefit.</p>
+
+<p>We won’t update all other methods in the article, as it’s mostly an exercise in copy in paste. As a last consideration, we need to decide if it’s worth capturing the end result of the flow:</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code><span class="k">def</span> <span class="n">capture_result</span><span class="p">({</span><span class="ss">:ok</span><span class="p">,</span> <span class="n">_result</span><span class="p">}),</span> <span class="k">do</span><span class="p">:</span> <span class="ss">:ok</span>
+<span class="k">def</span> <span class="n">capture_result</span><span class="p">({</span><span class="ss">:error</span><span class="p">,</span> <span class="n">reason</span><span class="p">})</span> <span class="k">do</span>
+  <span class="c1"># send to an exception app, queue an email, queue an error</span>
+<span class="k">end</span>
+</code></pre>
+</div>
+
+<p>The implementation here can change a lot, but generally it revolves around the question: “What errors do I want to know about?”. We could potentially ignore some errors and track only others, depending on their importance.</p>
+
+<h1 id="conclusions">Conclusions</h1>
+
+<p>In this post we’ve run through a possible approach for the implementation of an event-driven data-processing pipeline in Elixir. The core ideas behind this implementation are:</p>
+
+<ul>
+  <li>define clear boundaries between each step by creating versioned structs</li>
+  <li>implement each step as a protocol, so that every versioned struct has a dedicated implementation</li>
+  <li>assign steps to different processes, so that they can be scaled independently depending on the needed capacity</li>
+  <li>abstract the steps (if needed) behind a clear and composable api, so that there’s only one place in the codebase where the entire pipeline is defined.</li>
+  <li>log and trace along the way, always keeping a <code class="highlighter-rouge">request_id</code> parameter at hand to connect all steps together</li>
+</ul>
+
+<p>By following this approach, the benefits are:</p>
+
+<ul>
+  <li>steps isolation, which leads to ease of unit-testing: everything can expressed as “Given struct A, I want to return struct B”</li>
+  <li>great traceability</li>
+  <li>composability, so that adding a new step is a matter of repeating a pattern</li>
+  <li>useful abstraction: each step can be refactored or changed in complete isolation</li>
+  <li>ease of scaling, as all the steps run in independent processes</li>
+  <li>ability to grow in size but not in complexity: every time a new event is added, it’s sufficient to add the related protocol implementations</li>
+</ul>
+
+  </article>
+
+</div>
+
+
+      <footer class="site-footer">
+  <p>What are you waiting for? Send us an <a class="email" href="mailto:info@fullyforged.com?subject=Hello">email</a>.
+  Follow us on <a class="twitter" href="https://twitter.com/fully_forged">Twitter</a>. Or <a class="github" href="https://github.com/fully-forged">GitHub</a>.</p>
+  <div class="contacts">
+    <span class="tel">+447742143400</span>
+    <span class="email">info@fullyforged.com</span>
+  </div>
+  <div id="hcard-Claudio-Ortolina" class="vcard">
+    <span class="org">Fully Forged Ltd.</span>
+    <div class="adr">
+      <span class="street-address">44, North Point</span>
+      <span class="locality">London</span>
+      <span class="postal-code">N8 7HF</span>
+      <div class="country-name">United Kingdom</div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-66151638-1', 'auto');
+      ga('send', 'pageview');
+
+    </script>
+    <script src="//use.typekit.net/lys8xqy.js"></script>
+    <script>try{Typekit.load();}catch(e){}</script>
+
+    
+  </body>
+
+</html>

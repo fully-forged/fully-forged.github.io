@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+	<channel>
+		<title>Fully Forged - Elm</title>
+		<description>Posts categorized as 'elm'</description>
+		<link>http://www.fullyforged.com</link>
+		<atom:link href="http://www.fullyforged.com/feed.elixir.xml" rel="self" type="application/rss+xml" />
+		
+			<item>
+				<title>Phoenix and Elm: tracking the connection status</title>
+				
+					<description>&lt;p&gt;When working with &lt;a href=&quot;http://www.phoenixframework.org/docs/channels&quot;&gt;Phoenix channels&lt;/a&gt; and &lt;a href=&quot;http://elm-lang.org&quot;&gt;Elm&lt;/a&gt; it may be useful to keep track of the websockets connection status. In this blog post, we’ll see how this can be accomplished by leveraging interoperability.&lt;/p&gt;
+
+</description>
+				
+				<pubDate>Thu, 21 Jan 2016 10:30:00 +0000</pubDate>
+				<link>http://www.fullyforged.com/2016/01/21/phoenix-and-elm-tracking-the-connection-status.html</link>
+				<guid isPermaLink="true">http://www.fullyforged.com/2016/01/21/phoenix-and-elm-tracking-the-connection-status.html</guid>
+			</item>
+		
+	</channel>
+</rss>

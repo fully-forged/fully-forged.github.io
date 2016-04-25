@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html prefix="og: http://ogp.me/ns# article: http://ogp.me/ns/article#">
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>The Problem of State</title>
+  <meta name="description" content="This post originally appeared on New Bamboo’s blog.When we build client-side applications, most of the problems we face are related to state management: what...">
+  <meta property="og:description" content="This post originally appeared on New Bamboo’s blog.When we build client-side applications, most of the problems we face are related to state management: what...">
+  <meta property="og:site_name" content="Fully Forged">
+  <meta property="og:url" content="http://www.fullyforged.com/2015/07/03/the-problem-of-state.html">
+  <meta property="og:image" content="http://www.fullyforged.com/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png">
+
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="/assets/main-e64179a441158e60026a2fb2d9cb5f1d.css">
+  <link rel="canonical" href="http://www.fullyforged.com/2015/07/03/the-problem-of-state.html">
+  <link rel="alternate" type="application/rss+xml" title="Fully Forged" href="http://www.fullyforged.com/feed.xml" />
+  <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <script>window.html5 || document.write('<script src="js/vendor/html5shiv.js"><\/script>')</script>
+  <![endif]-->
+</head>
+
+
+  <body>
+
+    <div id="main">
+
+      <header class="site-header">
+  <a href="/">
+    <img src="/assets/logo-dd766cb30de7dcdce2d724d62525d1f1.png" alt="Logo">
+  </a>
+  <nav>
+    <a href="/#work">Work</a>
+    <a href="/blog.html">Words</a>
+    <a href="mailto:info@fullyforged.com?subject=Hello"><span>Hire</span> <span>us</span></a>
+  </nav>
+</header>
+
+
+      <div id="post">
+
+  <header class="post-header">
+    <h1 class="post-title">The Problem of State</h1>
+    <p class="post-meta">Friday 03 July 2015</p>
+  </header>
+
+  <article class="post-content">
+    <p><em>This post originally appeared on <a href="https://www.new-bamboo.co.uk/blog/2015/07/23/the-problem-of-state/">New Bamboo’s blog</a>.</em></p>
+
+<p>When we build client-side applications, most of the problems we face are related to state management: what elements on screen need to be in sync with each other, how do we track changes locally and from the server, how do we effectively handle computed properties (like a user’s complete address when it’s composed by separate pieces of data).</p>
+
+<p>What can we do to tame this complexity? In this post we’ll explore some ideas and lay out the basis for a unified strategy.</p>
+
+<!--more-->
+
+<h1 id="defining-state">Defining state</h1>
+
+<p>It’s useful to remind ourselves what state is, as it goes way beyond the mere data that sits on our page.</p>
+
+<p>Depending on the type of application we’re building, state can potentially be:</p>
+
+<ul>
+  <li>The current url</li>
+  <li>Dimensions of the window</li>
+  <li>Mouse position</li>
+  <li>Screen orientation</li>
+</ul>
+
+<p>Not many applications need this level of granularity, but it’s important to remember that it’s possible to treat all of these dimensions as a form of state.</p>
+
+<h1 id="identity-and-values">Identity and values</h1>
+
+<p>How can we frame the notion of state as something that changes over time?</p>
+
+<p>We can get some help from the functional programming world, specifically from <a href="http://clojure.org/state">Clojure and its creator, Rich Hickey</a>:</p>
+
+<blockquote>
+  <p>While some programs are merely large functions, e.g. compilers or theorem provers, many others are not - they are more like working models, and as such need to support what I’ll refer to in this discussion as <strong>identity</strong>. By identity I mean <strong>a stable logical entity associated with a series of different values over time</strong>. Models need identity for the same reasons humans need identity - to represent the world. How could it work if identities like ‘today’ or ‘America’ had to represent a single constant value for all time? Note that by identities I don’t mean names (I call my mother Mom, but you wouldn’t).</p>
+
+  <p>So, for this discussion, an identity is an entity that has a state, which is its value at a point in time. And <strong>a value is something that doesn’t change</strong>. 42 doesn’t change. June 29th 2008 doesn’t change. Points don’t move, dates don’t change, no matter what some bad class libraries may cause you to believe. Even aggregates are values. The set of my favorite foods doesn’t change, i.e. if I prefer different foods in the future, that will be a different set.</p>
+
+  <p>Identities are mental tools we use to superimpose continuity on a world which is constantly, functionally, creating new values of itself.</p>
+</blockquote>
+
+<p>When we’re editing an article, its identity is stable, yet it can be represented by different values over time. All possible iterations of its content are values, all of them contribute to its history.</p>
+
+<p>The direct consequence of this idea is that any application can be thought of as the succession of different values of the state over time. The transition between values is ruled by business logic and external input (e.g. user actions, data sources, etc).</p>
+
+<h1 id="modeling-mutations">Modeling mutations</h1>
+
+<p>Given this time-based notion of state, how can we model its mutations? Someone else to the rescue this time: <a href="http://floodyberry.com/carmack/johnc_plan_1998.html#d19981014">John Carmack</a>, one of the most important videogame programmers of all time (with projects like Doom and Quake).</p>
+
+<blockquote>
+  <p>I settled on combining all forms of input into a single system event queue, similar to the windows message queue. My original intention was to just rigorously define where certain functions were called and cut down the number of required system entry points, but it turned out to have much stronger benefits.</p>
+
+  <p>With all events coming through one point (The return values from system calls, including the filesystem contents, are “hidden” inputs that I make no attempt at capturing, ), it was easy to set up a journalling system that recorded everything the game received. This is very different than demo recording, which just simulates a network level connection and lets time move at its own rate. Realtime applications have a number of unique development difficulties because of the interaction of time with inputs and outputs.</p>
+
+  <p>[…]</p>
+
+  <p>The key point: Journaling of time along with other inputs turns a realtime application into a batch process, with all the attendant benefits for quality control and debugging. These problems, and many more, just go away. With a full input trace, you can accurately restart the session and play back to any point (conditional breakpoint on a frame number), or let a session play back at an arbitrarily degraded speed, but cover exactly the same code paths..</p>
+
+  <p>I’m sure lots of people realize that immediately, but it only truly sunk in for me recently. In thinking back over the years, I can see myself feeling around the problem, implementing partial journaling of network packets, and included the “fixedtime” cvar to eliminate most timing reproducibility issues, but I never hit on the proper global solution. I had always associated journaling with turning an interactive application into a batch application, but I never considered the small modification necessary to make it applicable to a realtime application.</p>
+</blockquote>
+
+<p>Carmack is talking about Quake 3 here, but the principles he’s outlining can be equally applied to the problem we’re handling.</p>
+
+<ol>
+  <li>Collect all inputs into a single queue</li>
+  <li>Process them and build a history of changes</li>
+</ol>
+
+<p>The implications of this approach are more powerful than immediately apparent:</p>
+
+<ul>
+  <li>If we transition from value to value over time, we can group all the logic that models these transitions in a single place. In other words, we can express all of the possible legal mutations to the state as actions with a semantic value: creating a new post, visiting the post page, fetching all posts from the server. Each one of them can be defined as simply as a function.</li>
+  <li>The sequence of values for the state becomes the history of our application. Ideas like undo and redo suddenly become much simpler, as they just mean moving from value to value in opposite directions.</li>
+  <li>By being careful around the way we shape our state values (what kind of data structures, the type of values we use and so on) we can get to the point where the state can be entirely serialized without any information loss. This means that we can potentially store it and retrieve it in the future.</li>
+</ul>
+
+<h1 id="rendering">Rendering</h1>
+
+<p>With all of this in mind, we can frame rendering as a visible representation of a state value, i.e. a certain value gets rendered in a specific way or, even more strictly, in <strong>only one possible way</strong>.</p>
+
+<p>The application flow can then be described as:</p>
+
+<ul>
+  <li>rendering of the initial state value</li>
+  <li>collection of any input (location change, new data coming in, user action, etc.)</li>
+  <li>state mutation and new value</li>
+  <li>re-render</li>
+  <li>repeat the process</li>
+</ul>
+
+<p>This model is extremely simple, as it removes a lot of complications:</p>
+
+<ul>
+  <li>a ui component is only responsible for collecting an input and calling a predefined action;</li>
+  <li>the action will cause a state mutation;</li>
+  <li>the application re-renders.</li>
+</ul>
+
+<p>We can summarize all of this in this diagram:</p>
+
+<figure class="block-image">
+  <img src="/assets/posts/the-problem-of-state-01-d74e5114880322890281bf92dfbc5d9d.jpg" alt="State diagram" />
+</figure>
+
+<h1 id="a-minimal-example">A minimal example</h1>
+
+<p>In this example we’re creating a <code class="highlighter-rouge">PostsList</code> component, which takes some data and a DOM container and exposes a single <code class="highlighter-rouge">render</code> function. Every time the function is called, the component wipes out the contents of the container and renders a <code class="highlighter-rouge">ul</code> element with all titles.</p>
+
+<p>How do we use it? We set its <code class="highlighter-rouge">.data</code> property and call <code class="highlighter-rouge">render</code> every time we want to update it.</p>
+
+<iframe width="100%" height="300" src="//jsfiddle.net/cloud8421/e86g5n4m/4/embedded/js,html,result/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+
+<p>Let’s make a small improvement, so that it re-renders every time we update the data.</p>
+
+<iframe width="100%" height="300" src="//jsfiddle.net/cloud8421/1L5w025a/1/embedded/js,html,result/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+
+<p>Here we define a <code class="highlighter-rouge">setData</code> function that always calls <code class="highlighter-rouge">render</code> at the end. By doing this, we avoid calling <code class="highlighter-rouge">render</code> manually. In addition, we can use it straight away in the constructor function and get the first render automatically.</p>
+
+<p>We can now proceed and implement a very rough state object and connect it to our component, so that we can manipulate a global state instead of the component state.</p>
+
+<iframe width="100%" height="300" src="//jsfiddle.net/cloud8421/pa5ho6zq/5/embedded/js,html,result/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+
+<p>Our state object is a freeform store that allows registering callbacks when data change. This way we can register a callback for our component and every time we call <code class="highlighter-rouge">appState.set</code> it will fire and update the page.</p>
+
+<p>The final thing we can do is flesh out an API to manipulate the state and give it some structure, using as an object as the underlying data structure.</p>
+
+<iframe width="100%" height="300" src="//jsfiddle.net/cloud8421/3zLztc66/2/embedded/js,html,result/" allowfullscreen="allowfullscreen" frameborder="0"></iframe>
+
+<p>All posts data is available under a <code class="highlighter-rouge">posts</code> key and we defined a clear <code class="highlighter-rouge">Actions</code> object that expresses the semantics of adding a new <code class="highlighter-rouge">Post</code>.</p>
+
+<h1 id="performance-and-virtual-dom">Performance and virtual DOM</h1>
+
+<p>There’s a caveat in this structure: re-rendering an entire application can be very expensive, as it implies rebuilding the entire DOM from scratch every time. Especially on mobile devices, this becomes a deal-breaker.</p>
+
+<p>A few libraries (the most famous being React.js) are trying to mitigate this issue by providing a level of abstraction above the DOM, so that the developer can stop writing hand-coded DOM mutations and use a more declarative api.</p>
+
+<p>The React lifecycle, for example, uses a conceptually simple approach: every <code class="highlighter-rouge">render</code> function creates a virtual DOM representation. The first time it gets rendered, it updates the DOM. When <code class="highlighter-rouge">render</code> is called again, React computes a new virtual DOM from the updated data and performs a diff against the previous one, calculating the list of fine-tuned mutations to apply to the DOM itself. For example, if the first time it would render a <code class="highlighter-rouge">&lt;h1&gt;Title&lt;/h1&gt;</code> and the second time <code class="highlighter-rouge">&lt;h1&gt;Updated title&lt;/h1&gt;</code>, it can just update the inner text of the element instead of destroying it.</p>
+
+<p>In a nutshell, React embraces the rendering model we outlined above, giving us extra tools to tame the performance issue.</p>
+
+<h1 id="where-do-we-go-from-here">Where do we go from here</h1>
+
+<p>This post touches on many topics, each one of them worthy of further research on itself.</p>
+
+<p>Here’s a list of resources that can be useful:</p>
+
+<ul>
+  <li>The aforementioned links to <a href="http://clojure.org/state">Clojure’s documentation about state</a> and <a href="http://floodyberry.com/carmack/johnc_plan_1998.html#d19981014">John Carmack’s .plan entry about state management</a>.</li>
+  <li><a href="https://github.com/evancz/elm-architecture-tutorial/">The Elm architecture tutorial</a>: we haven’t mentioned it before, but <a href="http://elm-lang.org/">Elm</a> is a very well designed reactive functional language that adheres completely to the architecture we’ve explored in this post. Many of its principles can be ported to JavaScript.</li>
+  <li><a href="https://github.com/omcljs/om/wiki/Conceptual-overview">Om’s architecture</a> explanation. Om is a <a href="https://github.com/clojure/clojurescript">Clojurescript</a> library that wraps React, with strong opinions about state management. Other suggestions may come from <a href="http://reagent-project.github.io/">Reagent</a>, another Clojurescript React wrapper.</li>
+  <li><a href="http://shaffner.us/cs/papers/tarpit.pdf">Ben Moseley, Peter Marks - Out of the Tar Pit</a>: a good paper that explans in detail the implications of unnecessary stateful code.</li>
+  <li><a href="http://rauchg.com/2015/pure-ui/">Guillermo Rauch - Pure UI</a>: an exploration of how the React rendering model can ease the conversation between design and development.</li>
+</ul>
+
+<p>Good lunchtime video talks:</p>
+
+<ul>
+  <li><a href="https://www.youtube.com/watch?v=mS264h8KGwk">David Nolen - Immutability, interactivity &amp; JavaScript</a>: an exploration of the benefits of immutable data structures.</li>
+  <li><a href="https://www.youtube.com/watch?v=-6BsiVyC1kM">The value of values with Rich Hickey</a>: a great talk that explores ideas about the separation of logic and data and its implications.</li>
+  <li><a href="https://www.youtube.com/watch?v=KYzlpRvWZ6c">React.js Conf 2015 - Making your app fast with high-performance components</a>: React specific, but it shows some principles around performant React applications that happen to be beneficial on architecture and simplicity as well.</li>
+</ul>
+
+  </article>
+
+</div>
+
+
+      <footer class="site-footer">
+  <p>What are you waiting for? Send us an <a class="email" href="mailto:info@fullyforged.com?subject=Hello">email</a>.
+  Follow us on <a class="twitter" href="https://twitter.com/fully_forged">Twitter</a>. Or <a class="github" href="https://github.com/fully-forged">GitHub</a>.</p>
+  <div class="contacts">
+    <span class="tel">+447742143400</span>
+    <span class="email">info@fullyforged.com</span>
+  </div>
+  <div id="hcard-Claudio-Ortolina" class="vcard">
+    <span class="org">Fully Forged Ltd.</span>
+    <div class="adr">
+      <span class="street-address">44, North Point</span>
+      <span class="locality">London</span>
+      <span class="postal-code">N8 7HF</span>
+      <div class="country-name">United Kingdom</div>
+    </div>
+  </div>
+</footer>
+
+
+    </div>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-66151638-1', 'auto');
+      ga('send', 'pageview');
+
+    </script>
+    <script src="//use.typekit.net/lys8xqy.js"></script>
+    <script>try{Typekit.load();}catch(e){}</script>
+
+    
+  </body>
+
+</html>
